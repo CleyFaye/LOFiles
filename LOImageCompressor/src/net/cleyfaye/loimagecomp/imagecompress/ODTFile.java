@@ -50,8 +50,11 @@ import org.xml.sax.helpers.DefaultHandler;
  * The save will pass files through some filters that can change the content.
  * For now it only change pictures.
  * 
- * TODO Implement a cleaner filter system TODO Force save of the mimetype as
- * uncompressed TODO Load the original document as DOM instead of using SAX
+ * TODO Implement a cleaner filter system
+ * 
+ * TODO Force save of the mimetype as uncompressed
+ * 
+ * TODO Load the original document as DOM instead of using SAX
  * 
  * TODO Use XPath
  * 
@@ -330,32 +333,7 @@ public class ODTFile {
             }
             // Now we do pictures
             if (imageFilter == null) {
-                // TODO move this out of the way
-                imageFilter = new ImageFilter() {
-
-                    @Override
-                    public boolean filterImage(final File tempDir,
-                            final ImageInfo imageInfo, final OutputStream output)
-                            throws FileNotFoundException, IOException
-                    {
-                        try (FileInputStream fis = new FileInputStream(
-                                new File(tempDir, imageInfo.getRelativeName()))) {
-                            final byte[] buffer = new byte[4096];
-                            int length;
-                            while ((length = fis.read(buffer)) > 0) {
-                                output.write(buffer, 0, length);
-                            }
-                        }
-                        return true;
-                    }
-
-                    @Override
-                    public String filterImageSuffix(final File tempDir,
-                            final ImageInfo imageInfo) throws Exception
-                    {
-                        return getFileSuffix(imageInfo.getRelativeName());
-                    }
-                };
+                imageFilter = new DummyImageFilter();
             }
             progress.progressMessage("Saving images");
             for (final ImageInfo info : mImagesMap.values()) {
