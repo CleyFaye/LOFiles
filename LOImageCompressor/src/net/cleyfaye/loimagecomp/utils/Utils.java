@@ -1,4 +1,4 @@
-package net.cleyfaye.loimagecomp;
+package net.cleyfaye.loimagecomp.utils;
 
 import java.io.IOException;
 

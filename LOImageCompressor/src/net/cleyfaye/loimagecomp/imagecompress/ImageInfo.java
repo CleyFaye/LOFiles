@@ -1,10 +1,12 @@
-package net.cleyfaye.loimagecomp;
+package net.cleyfaye.loimagecomp.imagecompress;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 
 import javax.imageio.ImageIO;
+
+import net.cleyfaye.loimagecomp.ImageSize;
 
 /**
  * Store informations about an image.

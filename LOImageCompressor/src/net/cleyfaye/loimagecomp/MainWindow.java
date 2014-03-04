@@ -1,30 +1,15 @@
 package net.cleyfaye.loimagecomp;
 
-import static net.cleyfaye.loimagecomp.Utils.dataSizeToString;
+import static net.cleyfaye.loimagecomp.utils.Utils.dataSizeToString;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.EventQueue;
-import java.awt.Graphics2D;
 import java.awt.GridLayout;
-import java.awt.RenderingHints;
-import java.awt.Transparency;
 import java.awt.event.ActionEvent;
-import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
-import javax.imageio.IIOImage;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
 import javax.swing.AbstractAction;
 import javax.swing.AbstractListModel;
 import javax.swing.Action;
@@ -46,6 +31,7 @@ import javax.swing.JSpinner;
 import javax.swing.ListSelectionModel;
 import javax.swing.ProgressMonitor;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.border.TitledBorder;
@@ -55,7 +41,12 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.filechooser.FileFilter;
 
-import net.cleyfaye.loimagecomp.ODTFile.ImageFilter;
+import net.cleyfaye.loimagecomp.imagecompress.Controller;
+import net.cleyfaye.loimagecomp.imagecompress.Controller.SampleQuality;
+import net.cleyfaye.loimagecomp.imagecompress.ImageCompress;
+import net.cleyfaye.loimagecomp.imagecompress.ImageInfo;
+import net.cleyfaye.loimagecomp.imagecompress.Interface;
+import net.cleyfaye.loimagecomp.utils.ProgressCheck;
 
 /**
  * Application main window
@@ -66,164 +57,7 @@ import net.cleyfaye.loimagecomp.ODTFile.ImageFilter;
  * 
  * @author Cley Faye
  */
-public class MainWindow {
-
-    /**
-     * Filter to resize images when saving ODT file.
-     * 
-     * TODO move this out of the GUI class!
-     * 
-     * @author Cley Faye
-     */
-    private static class ImageFilterer implements ImageFilter {
-
-        /** Target DPI */
-        private final double mDPI;
-        /** Target JPG quality */
-        private final int mJPGQuality;
-        /** Target Interpolation mode */
-        private Object mInterpolation;
-        /** Do we retain transparency or not */
-        private final boolean mKillTransparency;
-        /** Temporary directory for compressed images */
-        private final File mTempDir = Files.createTempDirectory("loimgcomp")
-                .toFile();
-        /** List of temporary files for each images path */
-        private final Map<String, File> mImageFiles = new HashMap<>();
-        /** Progress dialog */
-        private final ProgressMonitor mMonitor;
-        /** Number of images processed. This actually go up to 2*imagecount */
-        private int mProcessedImages = 0;
-
-        public ImageFilterer(final double dpi, final int jpgQuality,
-                final int scalingMethod, final boolean killTransparency,
-                final ProgressMonitor monitor) throws IOException {
-            mMonitor = monitor;
-            mDPI = dpi;
-            mJPGQuality = jpgQuality;
-            mKillTransparency = killTransparency;
-            mTempDir.deleteOnExit();
-            switch (scalingMethod) {
-            default:
-            case 0:
-                mInterpolation = RenderingHints.VALUE_INTERPOLATION_BICUBIC;
-                break;
-            case 1:
-                mInterpolation = RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR;
-                break;
-            }
-        }
-
-        @Override
-        public boolean filterImage(final File tempDir,
-                final ImageInfo imageInfo, final OutputStream output)
-                throws Exception
-        {
-            // At this point, each pictures is already saved somewhere.
-            if (mMonitor.isCanceled()) {
-                return false;
-            }
-            final byte[] buffer = new byte[4096];
-            final File file = mImageFiles.get(imageInfo.getRelativeName());
-            try (FileInputStream fis = new FileInputStream(file)) {
-                int length;
-                while ((length = fis.read(buffer)) > 0) {
-                    output.write(buffer, 0, length);
-                }
-            }
-            file.delete();
-            mMonitor.setProgress(++mProcessedImages);
-            return true;
-        }
-
-        @Override
-        public String filterImageSuffix(final File tempDir,
-                final ImageInfo imageInfo) throws Exception
-        {
-            // This function is called one time on each image, before actually
-            // saving. Since we need to know the final image suffix at this
-            // point, we have to save in each format to see which one is most
-            // efficient.
-            // Temp save file is stored for the next step.
-            if (mMonitor.isCanceled()) {
-                return null;
-            }
-            final ImageSize targetImageSize = ImageSize
-                    .projectImageSize(imageInfo.getImageSizePx(),
-                            imageInfo.getDrawSizeCm(), mDPI);
-            final BufferedImage original = ImageIO.read(new File(tempDir,
-                    imageInfo.getRelativeName()));
-            final int imageType = mKillTransparency ? BufferedImage.TYPE_INT_RGB
-                    : original.getType();
-            final BufferedImage resized = new BufferedImage(
-                    (int) targetImageSize.getX(), (int) targetImageSize.getY(),
-                    imageType);
-            final Graphics2D gc = (Graphics2D) resized.getGraphics();
-            gc.setRenderingHint(RenderingHints.KEY_RENDERING,
-                    RenderingHints.VALUE_RENDER_QUALITY);
-            gc.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                    mInterpolation);
-            gc.drawImage(original, 0, 0, (int) targetImageSize.getX(),
-                    (int) targetImageSize.getY(), null);
-            gc.dispose();
-
-            if (original.getTransparency() == Transparency.OPAQUE
-                    || mKillTransparency) {
-                // Either opaque, or kill transparency; save as jpeg or png,
-                // whichever is better
-                final ImageWriter writer = ImageIO.getImageWritersBySuffix(
-                        "jpg").next();
-                final ImageWriteParam iwp = writer.getDefaultWriteParam();
-                iwp.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-                iwp.setCompressionQuality(mJPGQuality / 100f);
-                final File tempJPG = Files.createTempFile("loimgcomp", "jpg")
-                        .toFile();
-                tempJPG.deleteOnExit();
-                final File tempPNG = Files.createTempFile("loimgcomp", "png")
-                        .toFile();
-                tempPNG.deleteOnExit();
-                try (ImageOutputStream ios = ImageIO
-                        .createImageOutputStream(new FileOutputStream(tempJPG))) {
-                    writer.setOutput(ios);
-                    writer.write(null, new IIOImage(resized, null, null), iwp);
-                }
-                try (ImageOutputStream ios = ImageIO
-                        .createImageOutputStream(new FileOutputStream(tempPNG))) {
-                    writer.setOutput(ios);
-                    writer.write(resized);
-                }
-                if (tempPNG.length() < tempJPG.length()) {
-                    // Use png
-                    tempJPG.delete();
-                    mImageFiles.put(imageInfo.getRelativeName(), tempPNG);
-                    mMonitor.setProgress(++mProcessedImages);
-                    return "png";
-                } else {
-                    // Use jpg
-                    tempPNG.delete();
-                    mImageFiles.put(imageInfo.getRelativeName(), tempJPG);
-                    mMonitor.setProgress(++mProcessedImages);
-                    return "jpg";
-                }
-            } else {
-                // Save as png
-                final File tempPNG = Files.createTempFile("loimgcomp", "png")
-                        .toFile();
-                tempPNG.deleteOnExit();
-                final ImageWriter writer = ImageIO.getImageWritersBySuffix(
-                        "png").next();
-                try (ImageOutputStream ios = ImageIO
-                        .createImageOutputStream(new FileOutputStream(tempPNG))) {
-                    writer.setOutput(ios);
-                    writer.write(resized);
-                }
-                mImageFiles.put(imageInfo.getRelativeName(), tempPNG);
-                mMonitor.setProgress(++mProcessedImages);
-                return "png";
-            }
-        }
-
-    }
+public class MainWindow implements Interface, ProgressCheck {
 
     private class OpenAction extends AbstractAction {
         private static final long serialVersionUID = 1L;
@@ -238,6 +72,7 @@ public class MainWindow {
         {
             try {
                 final JFileChooser fc = new JFileChooser();
+                // TODO move this out
                 final FileFilter filter = new FileFilter() {
 
                     @Override
@@ -256,8 +91,8 @@ public class MainWindow {
                 fc.setFileFilter(filter);
                 final int returnVal = fc.showOpenDialog(mframe);
                 if (returnVal == JFileChooser.APPROVE_OPTION) {
-                    mDocODT = new ODTFile(fc.getSelectedFile());
-                    refreshImagesList();
+                    mController.openFile(fc.getSelectedFile(), mDiz);
+                    mOriginalSize = fc.getSelectedFile().length();
                 }
             } catch (final Exception e2) {
                 e2.printStackTrace();
@@ -276,7 +111,7 @@ public class MainWindow {
         @Override
         public void actionPerformed(final ActionEvent e)
         {
-            if (mDocODT == null) {
+            if (!mController.isFileOpen()) {
                 return;
             }
             try {
@@ -301,10 +136,6 @@ public class MainWindow {
                 if (returnVal != JFileChooser.APPROVE_OPTION) {
                     return;
                 }
-                final ProgressMonitor monitor = new ProgressMonitor(mframe,
-                        "Compressing images", "", 0,
-                        mDocODT.getImagesCount() * 2);
-                mframe.setEnabled(false);
                 // TODO Maybe swingworker isn't the best choice here
                 final SwingWorker<Integer, Integer> sw = new SwingWorker<Integer, Integer>() {
 
@@ -313,14 +144,8 @@ public class MainWindow {
                     @Override
                     protected Integer doInBackground() throws Exception
                     {
-                        mResult = mDocODT.createCopy(
-                                fc.getSelectedFile(),
-                                new ImageFilterer(mDPI,
-                                        ((Integer) mJpgQualitySpinner
-                                                .getValue()).intValue(),
-                                        mScalingMethodCombo.getSelectedIndex(),
-                                        mKillTransparencyCheck.isSelected(),
-                                        monitor));
+                        mResult = mController.saveFile(fc.getSelectedFile(),
+                                mDiz);
                         return null;
                     }
 
@@ -328,7 +153,7 @@ public class MainWindow {
                     protected void done()
                     {
                         if (mResult) {
-                            final long previousSize = mDocODT.getSize();
+                            final long previousSize = mOriginalSize;
                             final long newSize = fc.getSelectedFile().length();
                             JOptionPane.showMessageDialog(mframe,
                                     "Save complete. Initial file size: "
@@ -339,7 +164,6 @@ public class MainWindow {
                             JOptionPane.showMessageDialog(mframe,
                                     "Operation aborted");
                         }
-                        mframe.setEnabled(true);
                     }
 
                 };
@@ -374,6 +198,8 @@ public class MainWindow {
         });
     }
 
+    private final MainWindow mDiz = this;
+
     // GUI stuff
     private JFrame mframe;
     private final Action actionOpen = new OpenAction();
@@ -395,8 +221,8 @@ public class MainWindow {
 
     private JCheckBox mKillTransparencyCheck;
 
-    /** Currently open ODT file */
-    private ODTFile mDocODT;
+    /** Controller */
+    private final Controller mController = new ImageCompress(this);
 
     /**
      * Output DPI
@@ -405,11 +231,66 @@ public class MainWindow {
      */
     private double mDPI = 90;
 
+    private List<ImageInfo> mImagesInfo = null;
+
+    private ProgressMonitor mProgressMonitor;
+
+    private long mOriginalSize;
+
     /**
      * Create the application.
      */
     public MainWindow() {
         initialize();
+    }
+
+    @Override
+    public void endProgress()
+    {
+        try {
+            SwingUtilities.invokeAndWait(new Runnable() {
+
+                @Override
+                public void run()
+                {
+                    mProgressMonitor.close();
+                    mProgressMonitor = null;
+                    mframe.setEnabled(true);
+                }
+            });
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public int getJPEGQuality()
+    {
+        return ((Integer) mJpgQualitySpinner.getValue()).intValue();
+    }
+
+    @Override
+    public boolean getKillTransparency()
+    {
+        return mKillTransparencyCheck.isSelected();
+    }
+
+    @Override
+    public SampleQuality getSampleQuality()
+    {
+        switch (mScalingMethodCombo.getSelectedIndex()) {
+        default:
+        case 0:
+            return SampleQuality.SQ_FAST;
+        case 1:
+            return SampleQuality.SQ_SMOOTH;
+        }
+    }
+
+    @Override
+    public double getTargetDPI()
+    {
+        return ((Float) mTargetDPISpinner.getValue()).doubleValue();
     }
 
     /**
@@ -555,12 +436,52 @@ public class MainWindow {
         panel_3.add(mScalingMethodCombo);
     }
 
+    @Override
+    public boolean progress(final int value)
+    {
+        final boolean res[] = new boolean[1];
+        try {
+            SwingUtilities.invokeAndWait(new Runnable() {
+
+                @Override
+                public void run()
+                {
+                    mProgressMonitor.setProgress(value);
+                    res[0] = !mProgressMonitor.isCanceled();
+                }
+            });
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+        return res[0];
+    }
+
+    @Override
+    public boolean progressMessage(final String message)
+    {
+        final boolean res[] = new boolean[1];
+        try {
+            SwingUtilities.invokeAndWait(new Runnable() {
+
+                @Override
+                public void run()
+                {
+                    mProgressMonitor.setNote(message);
+                    res[0] = !mProgressMonitor.isCanceled();
+                }
+            });
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+        return res[0];
+    }
+
     private void refreshImagesList()
     {
         mImageDetailsGroup.setVisible(false);
         final DefaultListModel<String> model = new DefaultListModel<>();
-        for (int imgCount = 0; imgCount < mDocODT.getImagesCount(); ++imgCount) {
-            final ImageInfo info = mDocODT.getImageInfo(imgCount);
+        for (int imgCount = 0; imgCount < mImagesInfo.size(); ++imgCount) {
+            final ImageInfo info = mImagesInfo.get(imgCount);
             if (!info.isEmbedded()) {
                 model.addElement("<not embedded>");
             } else {
@@ -579,7 +500,7 @@ public class MainWindow {
             mImageDetailsGroup.setVisible(false);
             return;
         }
-        final ImageInfo info = mDocODT.getImageInfo(index);
+        final ImageInfo info = mImagesInfo.get(index);
         if (!info.isEmbedded()) {
             mImageDetailsGroup.setVisible(false);
             return;
@@ -592,4 +513,31 @@ public class MainWindow {
         mOriginalSizeLabel.setText(dataSizeToString(info.getImageSize()));
         mImageDetailsGroup.setVisible(true);
     }
+
+    @Override
+    public void startProgress(final String title, final int maxValue)
+    {
+        try {
+            SwingUtilities.invokeAndWait(new Runnable() {
+
+                @Override
+                public void run()
+                {
+                    mframe.setEnabled(false);
+                    mProgressMonitor = new ProgressMonitor(mframe, title, "",
+                            0, maxValue);
+                }
+            });
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void updateImagesList(final List<ImageInfo> images)
+    {
+        mImagesInfo = images;
+        refreshImagesList();
+    }
+
 }

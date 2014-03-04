@@ -1,8 +1,8 @@
-package net.cleyfaye.loimagecomp;
+package net.cleyfaye.loimagecomp.imagecompress;
 
-import static net.cleyfaye.loimagecomp.Utils.getFileSuffix;
-import static net.cleyfaye.loimagecomp.Utils.replaceFileSuffix;
-import static net.cleyfaye.loimagecomp.Utils.sizeStringToDouble;
+import static net.cleyfaye.loimagecomp.utils.Utils.getFileSuffix;
+import static net.cleyfaye.loimagecomp.utils.Utils.replaceFileSuffix;
+import static net.cleyfaye.loimagecomp.utils.Utils.sizeStringToDouble;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -187,7 +187,7 @@ public class ODTFile {
     private final Map<String, ImageInfo> mImagesMap = new HashMap<>();
 
     /** All the image informations objects */
-    private final List<ImageInfo> mImages = new ArrayList<>();
+    final List<ImageInfo> mImages = new ArrayList<>();
 
     private static SAXParserFactory sSAXFactory = SAXParserFactory
             .newInstance();
