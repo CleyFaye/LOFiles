@@ -1,5 +1,7 @@
 package net.cleyfaye.loimagecomp;
 
+import static net.cleyfaye.loimagecomp.Utils.dataSizeToString;
+
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.EventQueue;
@@ -61,9 +63,6 @@ import net.cleyfaye.loimagecomp.ODTFile.ImageFilter;
  * TODO Implement a controller somewhere to separate GUI and useful code
  * 
  * TODO Implement a CLI at some point
- * 
- * TODO Implement a margin at which the image are not actually resized (for
- * example to not resize things from 500x500 to 498x498)
  * 
  * @author Cley Faye
  */
@@ -149,8 +148,9 @@ public class MainWindow {
             if (mMonitor.isCanceled()) {
                 return null;
             }
-            final ImageSize targetImageSize = projectImageSize(
-                    imageInfo.getImageSizePx(), imageInfo.getDrawSizeCm(), mDPI);
+            final ImageSize targetImageSize = ImageSize
+                    .projectImageSize(imageInfo.getImageSizePx(),
+                            imageInfo.getDrawSizeCm(), mDPI);
             final BufferedImage original = ImageIO.read(new File(tempDir,
                     imageInfo.getRelativeName()));
             final int imageType = mKillTransparency ? BufferedImage.TYPE_INT_RGB
@@ -332,9 +332,9 @@ public class MainWindow {
                             final long newSize = fc.getSelectedFile().length();
                             JOptionPane.showMessageDialog(mframe,
                                     "Save complete. Initial file size: "
-                                            + fileSizeToString(previousSize)
+                                            + dataSizeToString(previousSize)
                                             + ", new size:"
-                                            + fileSizeToString(newSize));
+                                            + dataSizeToString(newSize));
                         } else {
                             JOptionPane.showMessageDialog(mframe,
                                     "Operation aborted");
@@ -348,20 +348,6 @@ public class MainWindow {
                 e2.printStackTrace();
             }
         }
-    }
-
-    /**
-     * Return a file suffix.
-     * 
-     * TODO avoid issue when file don't have a suffix TODO move this in utility
-     * 
-     * @param str
-     *            The file name
-     * @return The file suffix (without the dot).
-     */
-    public static String getFileSuffix(final String str)
-    {
-        return str.substring(str.lastIndexOf('.') + 1);
     }
 
     /**
@@ -386,67 +372,6 @@ public class MainWindow {
                 }
             }
         });
-    }
-
-    /**
-     * Compute new image resolution after resizing.
-     * 
-     * This can shrink images, but never make them bigger. The new size will
-     * never be less than 1x1. If the draw size is less than 0.1x0.1, no
-     * resizing occurs (it's used to indicate that we don't know the intended
-     * print size).
-     * 
-     * TODO move this out of the GUI class!
-     * 
-     * @param originalSizePx
-     *            Original image size in pixels
-     * @param drawSizeCm
-     *            Intended print size in cm. If 0x0, it's supposed to be
-     *            unknown.
-     * @param dpi
-     *            Target DPI
-     * @return The new image size, in pixel.
-     */
-    static private ImageSize projectImageSize(final ImageSize originalSizePx,
-            final ImageSize drawSizeCm, final double dpi)
-    {
-        if (drawSizeCm.getX() < 0.1 || drawSizeCm.getY() < 0.1) {
-            return originalSizePx;
-        }
-        final double dpcm = dpi * 0.393701;
-        final ImageSize targetSize = new ImageSize(drawSizeCm.getX() * dpcm,
-                drawSizeCm.getY() * dpcm);
-        if (targetSize.getX() > originalSizePx.getX()) {
-            targetSize.setX(originalSizePx.getX());
-        }
-        if (targetSize.getY() > originalSizePx.getY()) {
-            targetSize.setY(originalSizePx.getY());
-        }
-        targetSize.setX(Math.round(targetSize.getX()));
-        targetSize.setY(Math.round(targetSize.getY()));
-        if (targetSize.getX() < 1) {
-            targetSize.setX(1);
-        }
-        if (targetSize.getY() < 1) {
-            targetSize.setY(1);
-        }
-        return targetSize;
-    }
-
-    /**
-     * Replace a file suffix.
-     * 
-     * TODO avoid issue when file don't have a suffix TODO move this in utility
-     * 
-     * @param str
-     *            The file name
-     * @param suffix
-     *            The new file suffix
-     * @return The renammed file
-     */
-    public static String replaceSuffix(final String str, final String suffix)
-    {
-        return str.substring(0, str.lastIndexOf('.') + 1) + suffix;
     }
 
     // GUI stuff
@@ -485,26 +410,6 @@ public class MainWindow {
      */
     public MainWindow() {
         initialize();
-    }
-
-    /**
-     * Convert a file size (in bytes) to a human readable string.
-     * 
-     * TODO move this into utility class
-     * 
-     * @param fileSize
-     *            The initial file size
-     * @return The size, in a string.
-     */
-    private String fileSizeToString(long fileSize)
-    {
-        final String[] suffixes = { "B", "kB", "MB", "GB", "TB" };
-        int id = 0;
-        while (id < suffixes.length - 1 && fileSize > 1500) {
-            fileSize /= 1000;
-            ++id;
-        }
-        return String.valueOf(fileSize) + " " + suffixes[id];
     }
 
     /**
@@ -681,10 +586,10 @@ public class MainWindow {
         }
         mOriginalResLabel.setText(info.getImageSizePx() + " px");
         mImageSizeLabel.setText(info.getDrawSizeCm() + " cm");
-        mTargetResLabel.setText(projectImageSize(info.getImageSizePx(),
-                info.getDrawSizeCm(), mDPI)
+        mTargetResLabel.setText(ImageSize.projectImageSize(
+                info.getImageSizePx(), info.getDrawSizeCm(), mDPI)
                 + " px");
-        mOriginalSizeLabel.setText(fileSizeToString(info.getImageSize()));
+        mOriginalSizeLabel.setText(dataSizeToString(info.getImageSize()));
         mImageDetailsGroup.setVisible(true);
     }
 }

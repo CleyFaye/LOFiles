@@ -1,5 +1,9 @@
 package net.cleyfaye.loimagecomp;
 
+import static net.cleyfaye.loimagecomp.Utils.getFileSuffix;
+import static net.cleyfaye.loimagecomp.Utils.replaceFileSuffix;
+import static net.cleyfaye.loimagecomp.Utils.sizeStringToDouble;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -44,8 +48,9 @@ import org.xml.sax.helpers.DefaultHandler;
  * For now it only change pictures.
  * 
  * TODO Implement a cleaner filter system TODO Force save of the mimetype as
- * uncompressed TODO Load the original document as DOM instead of using SAX TODO
- * Use XPath
+ * uncompressed TODO Load the original document as DOM instead of using SAX
+ * 
+ * TODO Use XPath
  * 
  * @author Cley Faye
  */
@@ -193,33 +198,6 @@ public class ODTFile {
     private static TransformerFactory sDOMOutFactory = TransformerFactory
             .newInstance();
 
-    /**
-     * Get the image size from a string to a double.
-     * 
-     * @param sizeString
-     *            The string containing the size. Either "XXcm" or "YYin" is
-     *            accepted.
-     * @return The size, in cm.
-     * 
-     *         TODO move this in an utility class
-     */
-    public static double sizeStringToDouble(final String sizeString)
-            throws IOException
-    {
-        if (sizeString == null || sizeString.isEmpty()) {
-            return 0;
-        }
-        if (sizeString.endsWith("cm")) {
-            return Double.valueOf(sizeString.substring(0,
-                    sizeString.length() - 2));
-        } else if (sizeString.endsWith("in")) {
-            // Not sure this is even possible. Too lazy to read full spec.
-            return Double.valueOf(sizeString.substring(0,
-                    sizeString.length() - 2)) * 2.54;
-        }
-        throw new IOException("Unexpected image size information");
-    }
-
     /** Create an ODTFile object from an existing ODT file */
     public ODTFile(final File odtFile) throws IOException,
             ParserConfigurationException, SAXException {
@@ -273,8 +251,8 @@ public class ODTFile {
             if (newSuffix == null) {
                 return false;
             }
-            final String newName = MainWindow.replaceSuffix(
-                    info.getRelativeName(), newSuffix);
+            final String newName = replaceFileSuffix(info.getRelativeName(),
+                    newSuffix);
             namesSubstitution.put(info.getRelativeName(), newName);
         }
         // Create the output
@@ -355,8 +333,7 @@ public class ODTFile {
                     public String filterImageSuffix(final File tempDir,
                             final ImageInfo imageInfo) throws Exception
                     {
-                        return MainWindow.getFileSuffix(imageInfo
-                                .getRelativeName());
+                        return getFileSuffix(imageInfo.getRelativeName());
                     }
                 };
             }

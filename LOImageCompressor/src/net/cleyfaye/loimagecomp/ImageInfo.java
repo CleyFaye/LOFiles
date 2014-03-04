@@ -12,15 +12,13 @@ import javax.imageio.ImageIO;
  * This class hold the image path, the intended print size, and the original
  * resolution.
  * 
- * TODO If acceptable, move image resizing code around here...
- * 
  * TODO Add a reference to the ODTFile object, for future use
  * 
  * @author Cley Faye
  */
 public class ImageInfo {
 
-    /** Intended print size in cm */
+    /** Maximum intended print size in cm */
     private final ImageSize mDrawSizeCm;
     /** Relative file name */
     private final String mFileName;
