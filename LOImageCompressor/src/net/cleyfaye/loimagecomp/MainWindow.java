@@ -45,6 +45,7 @@ import net.cleyfaye.loimagecomp.imagecompress.Controller;
 import net.cleyfaye.loimagecomp.imagecompress.Controller.SampleQuality;
 import net.cleyfaye.loimagecomp.imagecompress.ImageCompress;
 import net.cleyfaye.loimagecomp.imagecompress.ImageInfo;
+import net.cleyfaye.loimagecomp.imagecompress.ImageSize;
 import net.cleyfaye.loimagecomp.imagecompress.Interface;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
 

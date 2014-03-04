@@ -19,7 +19,6 @@ import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
 
-import net.cleyfaye.loimagecomp.ImageSize;
 import net.cleyfaye.loimagecomp.imagecompress.ODTFile.ImageFilter;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
 

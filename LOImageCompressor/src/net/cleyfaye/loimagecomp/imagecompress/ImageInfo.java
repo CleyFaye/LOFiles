@@ -6,8 +6,6 @@ import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
-import net.cleyfaye.loimagecomp.ImageSize;
-
 /**
  * Store informations about an image.
  * 
