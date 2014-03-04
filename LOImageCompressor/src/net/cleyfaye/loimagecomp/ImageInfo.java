@@ -21,9 +21,9 @@ import javax.imageio.ImageIO;
 public class ImageInfo {
 
     /** Intended print size in cm */
-    private ImageSize mDrawSizeCm;
+    private final ImageSize mDrawSizeCm;
     /** Relative file name */
-    private String mFileName;
+    private final String mFileName;
 
     /** Original resolution */
     private ImageSize mImageSizePx;
@@ -35,11 +35,12 @@ public class ImageInfo {
     /** The original image file */
     private File mFile;
 
-    public ImageInfo(File tempDir, String fileName, double drawWidthCm,
-            double drawHeightCm) throws IOException {
+    public ImageInfo(final File tempDir, final String fileName,
+            final double drawWidthCm, final double drawHeightCm)
+            throws IOException {
         mDrawSizeCm = new ImageSize(drawWidthCm, drawHeightCm);
         mFileName = fileName;
-        File imageFile = new File(fileName);
+        final File imageFile = new File(fileName);
         if (imageFile.isAbsolute()) {
             mEmbedded = false;
         } else {
@@ -47,7 +48,7 @@ public class ImageInfo {
             mEmbedded = mFile.exists();
         }
         if (mEmbedded) {
-            BufferedImage img = ImageIO.read(mFile);
+            final BufferedImage img = ImageIO.read(mFile);
             mImageSizePx = new ImageSize(img.getWidth(), img.getHeight());
             mImageSize = mFile.length();
         }
@@ -56,6 +57,44 @@ public class ImageInfo {
     public ImageSize getDrawSizeCm()
     {
         return mDrawSizeCm;
+    }
+
+    public long getImageSize()
+    {
+        return mImageSize;
+    }
+
+    public ImageSize getImageSizePx()
+    {
+        return mImageSizePx;
+    }
+
+    /** Return the image relative name */
+    public String getRelativeName()
+    {
+        return mFileName;
+    }
+
+    /**
+     * Update the intended print size.
+     * 
+     * When the same image is referenced multiple times, we take the largest
+     * print size in both directions.
+     * 
+     * @param readingWidth
+     *            New width
+     * @param readingHeight
+     *            New height
+     */
+    public void increaseDrawSize(final double readingWidth,
+            final double readingHeight)
+    {
+        if (mDrawSizeCm.getX() < readingWidth) {
+            mDrawSizeCm.setX(readingWidth);
+        }
+        if (mDrawSizeCm.getY() < readingHeight) {
+            mDrawSizeCm.setY(readingHeight);
+        }
     }
 
     /**
@@ -70,42 +109,5 @@ public class ImageInfo {
     public boolean isEmbedded()
     {
         return mEmbedded;
-    }
-
-    /** Return the image relative name */
-    public String getRelativeName()
-    {
-        return mFileName;
-    }
-
-    public ImageSize getImageSizePx()
-    {
-        return mImageSizePx;
-    }
-
-    public long getImageSize()
-    {
-        return mImageSize;
-    }
-
-    /**
-     * Update the intended print size.
-     * 
-     * When the same image is referenced multiple times, we take the largest
-     * print size in both directions.
-     * 
-     * @param readingWidth
-     *            New width
-     * @param readingHeight
-     *            New height
-     */
-    public void increaseDrawSize(double readingWidth, double readingHeight)
-    {
-        if (mDrawSizeCm.getX() < readingWidth) {
-            mDrawSizeCm.setX(readingWidth);
-        }
-        if (mDrawSizeCm.getY() < readingHeight) {
-            mDrawSizeCm.setY(readingHeight);
-        }
     }
 }

@@ -9,23 +9,19 @@ package net.cleyfaye.loimagecomp;
  */
 public class ImageSize {
 
-    public ImageSize(double x, double y) {
+    private double mX;
+
+    private double mY;
+
+    public ImageSize(final double x, final double y) {
         super();
         mX = x;
         mY = y;
     }
 
-    private double mX;
-    private double mY;
-
     public double getX()
     {
         return mX;
-    }
-
-    public void setX(double x)
-    {
-        mX = x;
     }
 
     public double getY()
@@ -33,7 +29,12 @@ public class ImageSize {
         return mY;
     }
 
-    public void setY(double y)
+    public void setX(final double x)
+    {
+        mX = x;
+    }
+
+    public void setY(final double y)
     {
         mY = y;
     }

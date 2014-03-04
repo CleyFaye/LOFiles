@@ -1,17 +1,14 @@
 package net.cleyfaye.loimagecomp;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,7 +23,6 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
@@ -55,78 +51,146 @@ import org.xml.sax.helpers.DefaultHandler;
  */
 public class ODTFile {
 
-    /** The origianl ODT file. */
-    private File mODTFile;
-    /** A temporary path where the ODT file is extracted. */
-    private File mTempPath = Files.createTempDirectory("loimgcomp").toFile();
-    /** A list of files present in the original ODT. */
-    private List<String> mFiles = new ArrayList<>();
     /**
-     * A mapping between image files (in "Pictures/" directory) and the stored
-     * image informations
+     * SAX handler to get image print size from the content.xml
+     * 
+     * TODO remove this in favor of XPath
+     * 
+     * @author Cley Faye
      */
-    private Map<String, ImageInfo> mImagesMap = new HashMap<>();
-    /** All the image informations objects */
-    private List<ImageInfo> mImages = new ArrayList<>();
+    private class ContentReaderHandler extends DefaultHandler {
+        private boolean mReadingFrame = false;
+        private double mReadingWidth = 0;
+        private double mReadingHeight = 0;
+        private String mFileName;
+        private final Map<String, ImageInfo> mImagesMap;
+        private final List<ImageInfo> mImages;
 
-    /** Return the number of images in the file */
-    public int getImagesCount()
-    {
-        return mImages.size();
-    }
+        public ContentReaderHandler(final Map<String, ImageInfo> imagesMap,
+                final List<ImageInfo> images) {
+            mImagesMap = imagesMap;
+            mImages = images;
+        }
 
-    /** Return the selected image informations */
-    public ImageInfo getImageInfo(int index)
-    {
-        return mImages.get(index);
-    }
-
-    /** Create an ODTFile object from an existing ODT file */
-    public ODTFile(File odtFile) throws IOException,
-            ParserConfigurationException, SAXException {
-        mTempPath.deleteOnExit();
-        mODTFile = odtFile;
-        extractFiles();
-        checkMimeType();
-        readImagesInfo();
-    }
-
-    /** Extract files in the temporary directory */
-    private void extractFiles() throws IOException
-    {
-        try (ZipInputStream zipInput = new ZipInputStream(new FileInputStream(
-                mODTFile))) {
-            ZipEntry zipEntry;
-            while ((zipEntry = zipInput.getNextEntry()) != null) {
-                String fileName = zipEntry.getName();
-                File tempPath = new File(mTempPath, fileName);
-                tempPath.getParentFile().mkdirs();
-                try (FileOutputStream output = new FileOutputStream(tempPath)) {
-                    byte[] buffer = new byte[4096];
-                    int readCount;
-                    while ((readCount = zipInput.read(buffer)) > 0) {
-                        output.write(buffer, 0, readCount);
+        @Override
+        public void endElement(final String uri, final String localName,
+                final String qName) throws SAXException
+        {
+            try {
+                if (qName.equals("draw:frame") && mReadingFrame) {
+                    mReadingFrame = false;
+                    if (mImagesMap.containsKey(mFileName)) {
+                        mImagesMap.get(mFileName).increaseDrawSize(
+                                mReadingWidth, mReadingHeight);
+                    } else {
+                        final ImageInfo info = new ImageInfo(mTempPath,
+                                mFileName, mReadingWidth, mReadingHeight);
+                        mImagesMap.put(mFileName, info);
+                        mImages.add(info);
                     }
-                    mFiles.add(fileName);
                 }
+            } catch (final IOException e) {
+                throw new SAXException(e);
+            }
+        }
+
+        @Override
+        public void startElement(final String uri, final String localName,
+                final String qName, final org.xml.sax.Attributes attributes)
+                throws SAXException
+        {
+            try {
+                if (qName.equals("draw:frame")) {
+                    mReadingFrame = true;
+                    mReadingWidth = sizeStringToDouble(attributes
+                            .getValue("svg:width"));
+                    mReadingHeight = sizeStringToDouble(attributes
+                            .getValue("svg:height"));
+                }
+                if (mReadingFrame) {
+                    if (qName.equals("draw:image")) {
+                        mFileName = attributes.getValue("xlink:href");
+                    }
+                }
+            } catch (final IOException e) {
+                throw new SAXException(e);
             }
         }
     }
 
-    /** Check that the extracted file is an actual ODT file */
-    private void checkMimeType() throws IOException
-    {
-        File mimetypeFile = new File(mTempPath, "mimetype");
-        List<String> lines = Files.readAllLines(mimetypeFile.toPath(),
-                Charset.forName("UTF-8"));
-        if (lines.size() < 1
-                || lines.get(0).compareTo(
-                        "application/vnd.oasis.opendocument.text") != 0) {
-            throw new IOException("Not an ODT file");
+    /** A filter that process each image from source to destination. */
+    public static interface ImageFilter {
+        public boolean filterImage(File tempDir, ImageInfo imageInfo,
+                OutputStream output) throws Exception;
+
+        public String filterImageSuffix(File tempDir, ImageInfo imageInfo)
+                throws Exception;
+    }
+
+    /**
+     * Get image information from styles.xml.
+     * 
+     * TODO remove this in favor of XPath. OR remove it completely, as we don't
+     * extract anything useful here.
+     * 
+     * @author Cley Faye
+     */
+    private class StylesReaderHandler extends DefaultHandler {
+        private final Map<String, ImageInfo> mImagesMap;
+        private final List<ImageInfo> mImages;
+
+        public StylesReaderHandler(final Map<String, ImageInfo> imagesMap,
+                final List<ImageInfo> images) {
+            mImagesMap = imagesMap;
+            mImages = images;
+        }
+
+        @Override
+        public void startElement(final String uri, final String localName,
+                final String qName, final org.xml.sax.Attributes attributes)
+                throws SAXException
+        {
+            try {
+                if (qName.equals("draw:fill-image")) {
+                    final String fileName = attributes.getValue("xlink:href");
+                    if (!mImagesMap.containsKey(fileName)) {
+                        final ImageInfo info = new ImageInfo(mTempPath,
+                                fileName, 0, 0);
+                        mImagesMap.put(fileName, info);
+                        mImages.add(info);
+                    }
+                }
+            } catch (final IOException e) {
+                throw new SAXException(e);
+            }
         }
     }
 
+    /** The origianl ODT file. */
+    private final File mODTFile;
+    /** A temporary path where the ODT file is extracted. */
+    private final File mTempPath = Files.createTempDirectory("loimgcomp")
+            .toFile();
+
+    /** A list of files present in the original ODT. */
+    private final List<String> mFiles = new ArrayList<>();
+
+    /**
+     * A mapping between image files (in "Pictures/" directory) and the stored
+     * image informations
+     */
+    private final Map<String, ImageInfo> mImagesMap = new HashMap<>();
+
+    /** All the image informations objects */
+    private final List<ImageInfo> mImages = new ArrayList<>();
+
     private static SAXParserFactory sSAXFactory = SAXParserFactory
+            .newInstance();
+
+    private static DocumentBuilderFactory sDOMFactory = DocumentBuilderFactory
+            .newInstance();
+
+    private static TransformerFactory sDOMOutFactory = TransformerFactory
             .newInstance();
 
     /**
@@ -139,7 +203,7 @@ public class ODTFile {
      * 
      *         TODO move this in an utility class
      */
-    public static double sizeStringToDouble(String sizeString)
+    public static double sizeStringToDouble(final String sizeString)
             throws IOException
     {
         if (sizeString == null || sizeString.isEmpty()) {
@@ -156,132 +220,27 @@ public class ODTFile {
         throw new IOException("Unexpected image size information");
     }
 
-    /**
-     * SAX handler to get image print size from the content.xml
-     * 
-     * TODO remove this in favor of XPath
-     * 
-     * @author Cley Faye
-     */
-    private class ContentReaderHandler extends DefaultHandler {
-        private boolean mReadingFrame = false;
-        private double mReadingWidth = 0;
-        private double mReadingHeight = 0;
-        private String mFileName;
-        private final Map<String, ImageInfo> mImagesMap;
-        private final List<ImageInfo> mImages;
-
-        public ContentReaderHandler(Map<String, ImageInfo> imagesMap,
-                List<ImageInfo> images) {
-            mImagesMap = imagesMap;
-            mImages = images;
-        }
-
-        public void startElement(String uri, String localName, String qName,
-                org.xml.sax.Attributes attributes) throws SAXException
-        {
-            try {
-                if (qName.equals("draw:frame")) {
-                    mReadingFrame = true;
-                    mReadingWidth = sizeStringToDouble(attributes
-                            .getValue("svg:width"));
-                    mReadingHeight = sizeStringToDouble(attributes
-                            .getValue("svg:height"));
-                }
-                if (mReadingFrame) {
-                    if (qName.equals("draw:image")) {
-                        mFileName = attributes.getValue("xlink:href");
-                    }
-                }
-            } catch (IOException e) {
-                throw new SAXException(e);
-            }
-        }
-
-        public void endElement(String uri, String localName, String qName)
-                throws SAXException
-        {
-            try {
-                if (qName.equals("draw:frame") && mReadingFrame) {
-                    mReadingFrame = false;
-                    if (mImagesMap.containsKey(mFileName)) {
-                        mImagesMap.get(mFileName).increaseDrawSize(
-                                mReadingWidth, mReadingHeight);
-                    } else {
-                        ImageInfo info = new ImageInfo(mTempPath, mFileName,
-                                mReadingWidth, mReadingHeight);
-                        mImagesMap.put(mFileName, info);
-                        mImages.add(info);
-                    }
-                }
-            } catch (IOException e) {
-                throw new SAXException(e);
-            }
-        }
+    /** Create an ODTFile object from an existing ODT file */
+    public ODTFile(final File odtFile) throws IOException,
+            ParserConfigurationException, SAXException {
+        mTempPath.deleteOnExit();
+        mODTFile = odtFile;
+        extractFiles();
+        checkMimeType();
+        readImagesInfo();
     }
 
-    /**
-     * Get image information from styles.xml.
-     * 
-     * TODO remove this in favor of XPath. OR remove it completely, as we don't
-     * extract anything useful here.
-     * 
-     * @author Cley Faye
-     */
-    private class StylesReaderHandler extends DefaultHandler {
-        private final Map<String, ImageInfo> mImagesMap;
-        private final List<ImageInfo> mImages;
-
-        public StylesReaderHandler(Map<String, ImageInfo> imagesMap,
-                List<ImageInfo> images) {
-            mImagesMap = imagesMap;
-            mImages = images;
-        }
-
-        public void startElement(String uri, String localName, String qName,
-                org.xml.sax.Attributes attributes) throws SAXException
-        {
-            try {
-                if (qName.equals("draw:fill-image")) {
-                    String fileName = attributes.getValue("xlink:href");
-                    if (!mImagesMap.containsKey(fileName)) {
-                        ImageInfo info = new ImageInfo(mTempPath, fileName, 0,
-                                0);
-                        mImagesMap.put(fileName, info);
-                        mImages.add(info);
-                    }
-                }
-            } catch (IOException e) {
-                throw new SAXException(e);
-            }
-        }
-    }
-
-    /**
-     * Get image informations from content.xml and styles.xml
-     * 
-     * This mainly extract print size from content.xml
-     */
-    private void readImagesInfo() throws IOException,
-            ParserConfigurationException, SAXException
+    /** Check that the extracted file is an actual ODT file */
+    private void checkMimeType() throws IOException
     {
-        File contentFile = new File(mTempPath, "content.xml");
-        File styleFile = new File(mTempPath, "styles.xml");
-        SAXParser saxParser = sSAXFactory.newSAXParser();
-
-        saxParser.parse(contentFile, new ContentReaderHandler(mImagesMap,
-                mImages));
-        saxParser
-                .parse(styleFile, new StylesReaderHandler(mImagesMap, mImages));
-    }
-
-    /** A filter that process each image from source to destination. */
-    public static interface ImageFilter {
-        public boolean filterImage(File tempDir, ImageInfo imageInfo,
-                OutputStream output) throws Exception;
-
-        public String filterImageSuffix(File tempDir, ImageInfo imageInfo)
-                throws Exception;
+        final File mimetypeFile = new File(mTempPath, "mimetype");
+        final List<String> lines = Files.readAllLines(mimetypeFile.toPath(),
+                Charset.forName("UTF-8"));
+        if (lines.size() < 1
+                || lines.get(0).compareTo(
+                        "application/vnd.oasis.opendocument.text") != 0) {
+            throw new IOException("Not an ODT file");
+        }
     }
 
     /**
@@ -298,30 +257,31 @@ public class ODTFile {
      *         filter callback
      * @throws Exception
      */
-    public boolean createCopy(File target, ImageFilter imageFilter)
+    public boolean createCopy(final File target, ImageFilter imageFilter)
             throws Exception
     {
-        byte[] buffer = new byte[4096];
+        final byte[] buffer = new byte[4096];
         // First, we get new names for all pictures. Needed mainly to change
         // from one file format to another
-        Map<String, String> namesSubstitution = new HashMap();
-        for (ImageInfo info : mImagesMap.values()) {
+        final Map<String, String> namesSubstitution = new HashMap<>();
+        for (final ImageInfo info : mImagesMap.values()) {
             if (!info.isEmbedded()) {
                 continue;
             }
-            String newSuffix = imageFilter.filterImageSuffix(mTempPath, info);
+            final String newSuffix = imageFilter.filterImageSuffix(mTempPath,
+                    info);
             if (newSuffix == null) {
                 return false;
             }
-            String newName = MainWindow.replaceSuffix(info.getRelativeName(),
-                    newSuffix);
+            final String newName = MainWindow.replaceSuffix(
+                    info.getRelativeName(), newSuffix);
             namesSubstitution.put(info.getRelativeName(), newName);
         }
         // Create the output
         try (ZipOutputStream zipOutput = new ZipOutputStream(
                 new FileOutputStream(target))) {
             zipOutput.setLevel(9);
-            for (String filePath : mFiles) {
+            for (final String filePath : mFiles) {
                 if (filePath.startsWith("Pictures/")) {
                     // We'll do pictures at the end
                     continue;
@@ -376,13 +336,13 @@ public class ODTFile {
                 imageFilter = new ImageFilter() {
 
                     @Override
-                    public boolean filterImage(File tempDir,
-                            ImageInfo imageInfo, OutputStream output)
+                    public boolean filterImage(final File tempDir,
+                            final ImageInfo imageInfo, final OutputStream output)
                             throws FileNotFoundException, IOException
                     {
                         try (FileInputStream fis = new FileInputStream(
                                 new File(tempDir, imageInfo.getRelativeName()))) {
-                            byte[] buffer = new byte[4096];
+                            final byte[] buffer = new byte[4096];
                             int length;
                             while ((length = fis.read(buffer)) > 0) {
                                 output.write(buffer, 0, length);
@@ -392,15 +352,15 @@ public class ODTFile {
                     }
 
                     @Override
-                    public String filterImageSuffix(File tempDir,
-                            ImageInfo imageInfo) throws Exception
+                    public String filterImageSuffix(final File tempDir,
+                            final ImageInfo imageInfo) throws Exception
                     {
                         return MainWindow.getFileSuffix(imageInfo
                                 .getRelativeName());
                     }
                 };
             }
-            for (ImageInfo info : mImagesMap.values()) {
+            for (final ImageInfo info : mImagesMap.values()) {
                 if (!info.isEmbedded()) {
                     continue;
                 }
@@ -415,10 +375,27 @@ public class ODTFile {
         return true;
     }
 
-    private static DocumentBuilderFactory sDOMFactory = DocumentBuilderFactory
-            .newInstance();
-    private static TransformerFactory sDOMOutFactory = TransformerFactory
-            .newInstance();
+    /** Extract files in the temporary directory */
+    private void extractFiles() throws IOException
+    {
+        try (ZipInputStream zipInput = new ZipInputStream(new FileInputStream(
+                mODTFile))) {
+            ZipEntry zipEntry;
+            while ((zipEntry = zipInput.getNextEntry()) != null) {
+                final String fileName = zipEntry.getName();
+                final File tempPath = new File(mTempPath, fileName);
+                tempPath.getParentFile().mkdirs();
+                try (FileOutputStream output = new FileOutputStream(tempPath)) {
+                    final byte[] buffer = new byte[4096];
+                    int readCount;
+                    while ((readCount = zipInput.read(buffer)) > 0) {
+                        output.write(buffer, 0, readCount);
+                    }
+                    mFiles.add(fileName);
+                }
+            }
+        }
+    }
 
     /**
      * Replace pictures path in content.xml
@@ -432,34 +409,28 @@ public class ODTFile {
      * @param output
      *            Destination content.xml
      */
-    private void filterContent(Map<String, String> imageReplacements,
-            InputStream input, OutputStream output)
+    private void filterContent(final Map<String, String> imageReplacements,
+            final InputStream input, final OutputStream output)
             throws ParserConfigurationException, SAXException, IOException,
             TransformerException
     {
-        DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
-        Document doc = builder.parse(input);
+        final DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
+        final Document doc = builder.parse(input);
 
-        NodeList nodes = doc.getElementsByTagName("draw:image");
+        final NodeList nodes = doc.getElementsByTagName("draw:image");
         for (int i = 0; i < nodes.getLength(); ++i) {
-            Node node = nodes.item(i);
-            NamedNodeMap attributes = node.getAttributes();
-            Node nodeAttr = attributes.getNamedItem("xlink:href");
+            final Node node = nodes.item(i);
+            final NamedNodeMap attributes = node.getAttributes();
+            final Node nodeAttr = attributes.getNamedItem("xlink:href");
             if (imageReplacements.containsKey(nodeAttr.getTextContent())) {
                 nodeAttr.setTextContent(imageReplacements.get(nodeAttr
                         .getTextContent()));
             }
         }
-        Transformer transformer = sDOMOutFactory.newTransformer();
-        DOMSource source = new DOMSource(doc);
-        StreamResult result = new StreamResult(output);
+        final Transformer transformer = sDOMOutFactory.newTransformer();
+        final DOMSource source = new DOMSource(doc);
+        final StreamResult result = new StreamResult(output);
         transformer.transform(source, result);
-    }
-
-    /** Return the size of the original ODT file */
-    public long getSize()
-    {
-        return mODTFile.length();
     }
 
     /**
@@ -474,27 +445,27 @@ public class ODTFile {
      * @param output
      *            Destination manifest file
      */
-    private void filterManifest(Map<String, String> imageReplacements,
-            InputStream input, OutputStream output)
+    private void filterManifest(final Map<String, String> imageReplacements,
+            final InputStream input, final OutputStream output)
             throws ParserConfigurationException, SAXException, IOException,
             TransformerException
     {
-        DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
-        Document doc = builder.parse(input);
+        final DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
+        final Document doc = builder.parse(input);
 
-        NodeList nodes = doc.getElementsByTagName("manifest:file-entry");
+        final NodeList nodes = doc.getElementsByTagName("manifest:file-entry");
         for (int i = 0; i < nodes.getLength(); ++i) {
-            Node node = nodes.item(i);
-            NamedNodeMap attributes = node.getAttributes();
-            Node nodeAttr = attributes.getNamedItem("manifest:full-path");
+            final Node node = nodes.item(i);
+            final NamedNodeMap attributes = node.getAttributes();
+            final Node nodeAttr = attributes.getNamedItem("manifest:full-path");
             if (imageReplacements.containsKey(nodeAttr.getTextContent())) {
                 nodeAttr.setTextContent(imageReplacements.get(nodeAttr
                         .getTextContent()));
             }
         }
-        Transformer transformer = sDOMOutFactory.newTransformer();
-        DOMSource source = new DOMSource(doc);
-        StreamResult result = new StreamResult(output);
+        final Transformer transformer = sDOMOutFactory.newTransformer();
+        final DOMSource source = new DOMSource(doc);
+        final StreamResult result = new StreamResult(output);
         transformer.transform(source, result);
     }
 
@@ -508,27 +479,63 @@ public class ODTFile {
      * @param output
      *            Destination styles.xml
      */
-    private void filterStyles(Map<String, String> imageReplacements,
-            InputStream input, OutputStream output)
+    private void filterStyles(final Map<String, String> imageReplacements,
+            final InputStream input, final OutputStream output)
             throws ParserConfigurationException, SAXException, IOException,
             TransformerException
     {
-        DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
-        Document doc = builder.parse(input);
+        final DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
+        final Document doc = builder.parse(input);
 
-        NodeList nodes = doc.getElementsByTagName("draw:fill-image");
+        final NodeList nodes = doc.getElementsByTagName("draw:fill-image");
         for (int i = 0; i < nodes.getLength(); ++i) {
-            Node node = nodes.item(i);
-            NamedNodeMap attributes = node.getAttributes();
-            Node nodeAttr = attributes.getNamedItem("xlink:href");
+            final Node node = nodes.item(i);
+            final NamedNodeMap attributes = node.getAttributes();
+            final Node nodeAttr = attributes.getNamedItem("xlink:href");
             if (imageReplacements.containsKey(nodeAttr.getTextContent())) {
                 nodeAttr.setTextContent(imageReplacements.get(nodeAttr
                         .getTextContent()));
             }
         }
-        Transformer transformer = sDOMOutFactory.newTransformer();
-        DOMSource source = new DOMSource(doc);
-        StreamResult result = new StreamResult(output);
+        final Transformer transformer = sDOMOutFactory.newTransformer();
+        final DOMSource source = new DOMSource(doc);
+        final StreamResult result = new StreamResult(output);
         transformer.transform(source, result);
+    }
+
+    /** Return the selected image informations */
+    public ImageInfo getImageInfo(final int index)
+    {
+        return mImages.get(index);
+    }
+
+    /** Return the number of images in the file */
+    public int getImagesCount()
+    {
+        return mImages.size();
+    }
+
+    /** Return the size of the original ODT file */
+    public long getSize()
+    {
+        return mODTFile.length();
+    }
+
+    /**
+     * Get image informations from content.xml and styles.xml
+     * 
+     * This mainly extract print size from content.xml
+     */
+    private void readImagesInfo() throws IOException,
+            ParserConfigurationException, SAXException
+    {
+        final File contentFile = new File(mTempPath, "content.xml");
+        final File styleFile = new File(mTempPath, "styles.xml");
+        final SAXParser saxParser = sSAXFactory.newSAXParser();
+
+        saxParser.parse(contentFile, new ContentReaderHandler(mImagesMap,
+                mImages));
+        saxParser
+                .parse(styleFile, new StylesReaderHandler(mImagesMap, mImages));
     }
 }
