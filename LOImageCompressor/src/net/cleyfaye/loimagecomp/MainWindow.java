@@ -9,6 +9,8 @@ import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import javax.swing.AbstractAction;
 import javax.swing.AbstractListModel;
@@ -32,7 +34,6 @@ import javax.swing.ListSelectionModel;
 import javax.swing.ProgressMonitor;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
-import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
@@ -60,23 +61,6 @@ import net.cleyfaye.loimagecomp.utils.ProgressCheck;
  */
 public class MainWindow implements Interface, ProgressCheck {
 
-    private File mDialogPath = null;
-
-    private static FileFilter mODTFileFilter = new FileFilter() {
-
-        @Override
-        public boolean accept(final File f)
-        {
-            return f.getName().endsWith(".odt") || f.isDirectory();
-        }
-
-        @Override
-        public String getDescription()
-        {
-            return "OpenDocument Text (*.odt)";
-        }
-    };
-
     private class OpenAction extends AbstractAction {
         private static final long serialVersionUID = 1L;
 
@@ -94,11 +78,23 @@ public class MainWindow implements Interface, ProgressCheck {
                 fc.setFileFilter(mODTFileFilter);
                 fc.setCurrentDirectory(mDialogPath);
                 final int returnVal = fc.showOpenDialog(mframe);
-                if (returnVal == JFileChooser.APPROVE_OPTION) {
-                    mDialogPath = fc.getCurrentDirectory();
-                    mController.openFile(fc.getSelectedFile(), mDiz);
-                    mOriginalSize = fc.getSelectedFile().length();
+                if (returnVal != JFileChooser.APPROVE_OPTION) {
+                    return;
                 }
+                mDialogPath = fc.getCurrentDirectory();
+                mOriginalSize = fc.getSelectedFile().length();
+                mThreadPool.execute(new Runnable() {
+
+                    @Override
+                    public void run()
+                    {
+                        try {
+                            mController.openFile(fc.getSelectedFile(), mDiz);
+                        } catch (final Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
             } catch (final Exception e2) {
                 e2.printStackTrace();
             }
@@ -129,38 +125,34 @@ public class MainWindow implements Interface, ProgressCheck {
                     return;
                 }
                 mDialogPath = fc.getCurrentDirectory();
-                // TODO Maybe swingworker isn't the best choice here
-                final SwingWorker<Integer, Integer> sw = new SwingWorker<Integer, Integer>() {
-
-                    private boolean mResult;
+                mThreadPool.execute(new Runnable() {
 
                     @Override
-                    protected Integer doInBackground() throws Exception
+                    public void run()
                     {
-                        mResult = mController.saveFile(fc.getSelectedFile(),
-                                mDiz);
-                        return null;
-                    }
-
-                    @Override
-                    protected void done()
-                    {
-                        if (mResult) {
-                            final long previousSize = mOriginalSize;
-                            final long newSize = fc.getSelectedFile().length();
-                            JOptionPane.showMessageDialog(mframe,
-                                    "Save complete. Initial file size: "
-                                            + dataSizeToString(previousSize)
-                                            + ", new size:"
-                                            + dataSizeToString(newSize));
-                        } else {
-                            JOptionPane.showMessageDialog(mframe,
-                                    "Operation aborted");
+                        try {
+                            final boolean result = mController.saveFile(
+                                    fc.getSelectedFile(), mDiz);
+                            if (result) {
+                                final long previousSize = mOriginalSize;
+                                final long newSize = fc.getSelectedFile()
+                                        .length();
+                                JOptionPane
+                                        .showMessageDialog(
+                                                mframe,
+                                                "Save complete. Initial file size: "
+                                                        + dataSizeToString(previousSize)
+                                                        + ", new size:"
+                                                        + dataSizeToString(newSize));
+                            } else {
+                                JOptionPane.showMessageDialog(mframe,
+                                        "Operation aborted");
+                            }
+                        } catch (final Exception e) {
+                            e.printStackTrace();
                         }
                     }
-
-                };
-                sw.execute();
+                });
             } catch (final Exception e2) {
                 e2.printStackTrace();
             }
@@ -190,6 +182,26 @@ public class MainWindow implements Interface, ProgressCheck {
             }
         });
     }
+
+    /** Shared path for open/save dialogs */
+    private File mDialogPath = null;
+
+    private final Executor mThreadPool = Executors.newSingleThreadExecutor();
+
+    private static FileFilter mODTFileFilter = new FileFilter() {
+
+        @Override
+        public boolean accept(final File f)
+        {
+            return f.getName().endsWith(".odt") || f.isDirectory();
+        }
+
+        @Override
+        public String getDescription()
+        {
+            return "OpenDocument Text (*.odt)";
+        }
+    };
 
     private final MainWindow mDiz = this;
 
@@ -469,6 +481,23 @@ public class MainWindow implements Interface, ProgressCheck {
         return res[0];
     }
 
+    @Override
+    public void progressNewMaxValue(final int maxValue)
+    {
+        try {
+            SwingUtilities.invokeAndWait(new Runnable() {
+
+                @Override
+                public void run()
+                {
+                    mProgressMonitor.setMaximum(maxValue);
+                }
+            });
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private void refreshImagesList()
     {
         mImageDetailsGroup.setVisible(false);
@@ -508,7 +537,7 @@ public class MainWindow implements Interface, ProgressCheck {
     }
 
     @Override
-    public void startProgress(final String title, final int maxValue)
+    public void startProgress(final String title)
     {
         try {
             SwingUtilities.invokeAndWait(new Runnable() {
@@ -518,7 +547,7 @@ public class MainWindow implements Interface, ProgressCheck {
                 {
                     mframe.setEnabled(false);
                     mProgressMonitor = new ProgressMonitor(mframe, title, "",
-                            0, maxValue);
+                            0, 1);
                 }
             });
         } catch (final Exception e) {

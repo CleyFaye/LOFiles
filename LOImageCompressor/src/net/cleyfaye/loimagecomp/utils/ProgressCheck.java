@@ -52,10 +52,18 @@ public interface ProgressCheck {
         }
 
         @Override
-        public void startProgress(final String title, final int maxValue)
+        public void progressNewMaxValue(final int maxValue)
         {
             if (mProgressCheck != null) {
-                mProgressCheck.startProgress(title, maxValue);
+                mProgressCheck.progressNewMaxValue(maxValue);
+            }
+        }
+
+        @Override
+        public void startProgress(final String title)
+        {
+            if (mProgressCheck != null) {
+                mProgressCheck.startProgress(title);
             }
         }
 
@@ -88,6 +96,14 @@ public interface ProgressCheck {
     public boolean progressMessage(String message);
 
     /**
+     * Set a new max value.
+     * 
+     * @param maxValue
+     *            New max progress value
+     */
+    public void progressNewMaxValue(int maxValue);
+
+    /**
      * Called to display the progress bar.
      * 
      * This function will be called once per "progress". It will always be
@@ -100,8 +116,6 @@ public interface ProgressCheck {
      * 
      * @param title
      *            A title that can be displayed to the user
-     * @param maxValue
-     *            The maximum progress value
      */
-    public void startProgress(String title, int maxValue);
+    public void startProgress(String title);
 }

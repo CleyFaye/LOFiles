@@ -32,6 +32,9 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import net.cleyfaye.loimagecomp.utils.ProgressCheck;
+import net.cleyfaye.loimagecomp.utils.ProgressCheck.Instance;
+
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -199,18 +202,20 @@ public class ODTFile {
             .newInstance();
 
     /** Create an ODTFile object from an existing ODT file */
-    public ODTFile(final File odtFile) throws IOException,
-            ParserConfigurationException, SAXException {
+    public ODTFile(final File odtFile, final ProgressCheck progressCheck)
+            throws IOException, ParserConfigurationException, SAXException {
+        final Instance progress = new Instance(progressCheck);
         mTempPath.deleteOnExit();
         mODTFile = odtFile;
-        extractFiles();
-        checkMimeType();
-        readImagesInfo();
+        extractFiles(progress);
+        checkMimeType(progress);
+        readImagesInfo(progress);
     }
 
     /** Check that the extracted file is an actual ODT file */
-    private void checkMimeType() throws IOException
+    private void checkMimeType(final ProgressCheck progress) throws IOException
     {
+        progress.progressMessage("Checking manifest");
         final File mimetypeFile = new File(mTempPath, "mimetype");
         final List<String> lines = Files.readAllLines(mimetypeFile.toPath(),
                 Charset.forName("UTF-8"));
@@ -231,18 +236,28 @@ public class ODTFile {
      *            The output file
      * @param imageFilter
      *            A filter for image files
+     * @param progressCheck
+     *            Callback to display progress
      * @return true if the process completed, false if it was interrupted by a
      *         filter callback
      * @throws Exception
      */
-    public boolean createCopy(final File target, ImageFilter imageFilter)
-            throws Exception
+    public boolean createCopy(final File target, ImageFilter imageFilter,
+            final ProgressCheck progressCheck) throws Exception
     {
+        final Instance progress = new Instance(progressCheck);
+        progress.progressNewMaxValue(mImagesMap.values().size() * 2
+                + mFiles.size());
+        int progressValue = 0;
         final byte[] buffer = new byte[4096];
         // First, we get new names for all pictures. Needed mainly to change
         // from one file format to another
         final Map<String, String> namesSubstitution = new HashMap<>();
+        progress.progressMessage("Filtering images");
         for (final ImageInfo info : mImagesMap.values()) {
+            if (!progress.progress(++progressValue)) {
+                return false;
+            }
             if (!info.isEmbedded()) {
                 continue;
             }
@@ -255,11 +270,16 @@ public class ODTFile {
                     newSuffix);
             namesSubstitution.put(info.getRelativeName(), newName);
         }
+        progress.progressMessage("Saving base content");
         // Create the output
         try (ZipOutputStream zipOutput = new ZipOutputStream(
                 new FileOutputStream(target))) {
             zipOutput.setLevel(9);
             for (final String filePath : mFiles) {
+                if (!progress.progress(++progressValue)) {
+                    return false;
+                }
+                // TODO better code here
                 if (filePath.startsWith("Pictures/")) {
                     // We'll do pictures at the end
                     continue;
@@ -337,7 +357,11 @@ public class ODTFile {
                     }
                 };
             }
+            progress.progressMessage("Saving images");
             for (final ImageInfo info : mImagesMap.values()) {
+                if (!progress.progress(++progressValue)) {
+                    return false;
+                }
                 if (!info.isEmbedded()) {
                     continue;
                 }
@@ -353,8 +377,9 @@ public class ODTFile {
     }
 
     /** Extract files in the temporary directory */
-    private void extractFiles() throws IOException
+    private void extractFiles(final ProgressCheck progress) throws IOException
     {
+        progress.progressMessage("Uncompressing file");
         try (ZipInputStream zipInput = new ZipInputStream(new FileInputStream(
                 mODTFile))) {
             ZipEntry zipEntry;
@@ -503,9 +528,10 @@ public class ODTFile {
      * 
      * This mainly extract print size from content.xml
      */
-    private void readImagesInfo() throws IOException,
-            ParserConfigurationException, SAXException
+    private void readImagesInfo(final ProgressCheck progress)
+            throws IOException, ParserConfigurationException, SAXException
     {
+        progress.progressMessage("Reading image informations");
         final File contentFile = new File(mTempPath, "content.xml");
         final File styleFile = new File(mTempPath, "styles.xml");
         final SAXParser saxParser = sSAXFactory.newSAXParser();

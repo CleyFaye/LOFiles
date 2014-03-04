@@ -20,7 +20,6 @@ import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
 
 import net.cleyfaye.loimagecomp.imagecompress.ODTFile.ImageFilter;
-import net.cleyfaye.loimagecomp.utils.ProgressCheck;
 
 /**
  * Filter to resize images when saving ODT file.
@@ -42,15 +41,10 @@ public class DownsampleImageFilter implements ImageFilter {
             .toFile();
     /** List of temporary files for each images path */
     private final Map<String, File> mImageFiles = new HashMap<>();
-    /** Progress dialog */
-    private final ProgressCheck mMonitor;
-    /** Number of images processed. This actually go up to 2*imagecount */
-    private int mProcessedImages = 0;
 
     public DownsampleImageFilter(final double dpi, final int jpgQuality,
-            final int scalingMethod, final boolean killTransparency,
-            final ProgressCheck monitor) throws IOException {
-        mMonitor = monitor;
+            final int scalingMethod, final boolean killTransparency)
+            throws IOException {
         mDPI = dpi;
         mJPGQuality = jpgQuality;
         mKillTransparency = killTransparency;
@@ -80,9 +74,6 @@ public class DownsampleImageFilter implements ImageFilter {
             }
         }
         file.delete();
-        if (!mMonitor.progress(++mProcessedImages)) {
-            return false;
-        }
         return true;
     }
 
@@ -141,13 +132,11 @@ public class DownsampleImageFilter implements ImageFilter {
                 // Use png
                 tempJPG.delete();
                 mImageFiles.put(imageInfo.getRelativeName(), tempPNG);
-                mMonitor.progress(++mProcessedImages);
                 return "png";
             } else {
                 // Use jpg
                 tempPNG.delete();
                 mImageFiles.put(imageInfo.getRelativeName(), tempJPG);
-                mMonitor.progress(++mProcessedImages);
                 return "jpg";
             }
         } else {
@@ -163,7 +152,6 @@ public class DownsampleImageFilter implements ImageFilter {
                 writer.write(resized);
             }
             mImageFiles.put(imageInfo.getRelativeName(), tempPNG);
-            mMonitor.progress(++mProcessedImages);
             return "png";
         }
     }

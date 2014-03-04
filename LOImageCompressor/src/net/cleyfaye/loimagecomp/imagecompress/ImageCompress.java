@@ -72,8 +72,11 @@ public class ImageCompress implements Controller, Interface {
     public void openFile(final File odtFile, final ProgressCheck progressCheck)
             throws IOException, ParserConfigurationException, SAXException
     {
-        mODTFile = new ODTFile(odtFile);
+        final Instance progress = new Instance(progressCheck);
+        progress.startProgress("Loading file");
+        mODTFile = new ODTFile(odtFile, progress);
         updateImagesList(mODTFile.mImages);
+        progress.endProgress();
     }
 
     @Override
@@ -81,15 +84,17 @@ public class ImageCompress implements Controller, Interface {
             final ProgressCheck progressCheck) throws IOException, Exception
     {
         final Instance progress = new Instance(progressCheck);
-        progress.startProgress("Saving file", mODTFile.getImagesCount() * 2);
+        progress.startProgress("Saving file");
+        progress.progressNewMaxValue(mODTFile.getImagesCount() * 2);
         final double dpi = getTargetDPI();
         final int jpegQuality = getJPEGQuality();
         final int sampleQuality = getSampleQuality() == SampleQuality.SQ_FAST ? 1
                 : 0;
         final boolean killTransparency = getKillTransparency();
         final ImageFilter imageFilter = new DownsampleImageFilter(dpi,
-                jpegQuality, sampleQuality, killTransparency, progress);
-        final boolean result = mODTFile.createCopy(odtFile, imageFilter);
+                jpegQuality, sampleQuality, killTransparency);
+        final boolean result = mODTFile.createCopy(odtFile, imageFilter,
+                progress);
         progress.endProgress();
         return result;
     }
