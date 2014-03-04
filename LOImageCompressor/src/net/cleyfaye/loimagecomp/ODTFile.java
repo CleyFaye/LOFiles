@@ -39,25 +39,50 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
-public class DocODT {
+/**
+ * Manage the content of an ODT file
+ * 
+ * This class is able to load an ODT file, and save it somewhere else.
+ * 
+ * The save will pass files through some filters that can change the content.
+ * For now it only change pictures.
+ * 
+ * TODO Implement a cleaner filter system TODO Force save of the mimetype as
+ * uncompressed TODO Load the original document as DOM instead of using SAX TODO
+ * Use XPath
+ * 
+ * @author Cley Faye
+ */
+public class ODTFile {
 
+    /** The origianl ODT file. */
     private File mODTFile;
+    /** A temporary path where the ODT file is extracted. */
     private File mTempPath = Files.createTempDirectory("loimgcomp").toFile();
+    /** A list of files present in the original ODT. */
     private List<String> mFiles = new ArrayList<>();
+    /**
+     * A mapping between image files (in "Pictures/" directory) and the stored
+     * image informations
+     */
     private Map<String, ImageInfo> mImagesMap = new HashMap<>();
+    /** All the image informations objects */
     private List<ImageInfo> mImages = new ArrayList<>();
 
+    /** Return the number of images in the file */
     public int getImagesCount()
     {
         return mImages.size();
     }
 
+    /** Return the selected image informations */
     public ImageInfo getImageInfo(int index)
     {
         return mImages.get(index);
     }
 
-    public DocODT(File odtFile) throws IOException,
+    /** Create an ODTFile object from an existing ODT file */
+    public ODTFile(File odtFile) throws IOException,
             ParserConfigurationException, SAXException {
         mTempPath.deleteOnExit();
         mODTFile = odtFile;
@@ -66,6 +91,7 @@ public class DocODT {
         readImagesInfo();
     }
 
+    /** Extract files in the temporary directory */
     private void extractFiles() throws IOException
     {
         try (ZipInputStream zipInput = new ZipInputStream(new FileInputStream(
@@ -87,6 +113,7 @@ public class DocODT {
         }
     }
 
+    /** Check that the extracted file is an actual ODT file */
     private void checkMimeType() throws IOException
     {
         File mimetypeFile = new File(mTempPath, "mimetype");
@@ -102,6 +129,16 @@ public class DocODT {
     private static SAXParserFactory sSAXFactory = SAXParserFactory
             .newInstance();
 
+    /**
+     * Get the image size from a string to a double.
+     * 
+     * @param sizeString
+     *            The string containing the size. Either "XXcm" or "YYin" is
+     *            accepted.
+     * @return The size, in cm.
+     * 
+     *         TODO move this in an utility class
+     */
     public static double sizeStringToDouble(String sizeString)
             throws IOException
     {
@@ -119,6 +156,13 @@ public class DocODT {
         throw new IOException("Unexpected image size information");
     }
 
+    /**
+     * SAX handler to get image print size from the content.xml
+     * 
+     * TODO remove this in favor of XPath
+     * 
+     * @author Cley Faye
+     */
     private class ContentReaderHandler extends DefaultHandler {
         private boolean mReadingFrame = false;
         private double mReadingWidth = 0;
@@ -176,6 +220,14 @@ public class DocODT {
         }
     }
 
+    /**
+     * Get image information from styles.xml.
+     * 
+     * TODO remove this in favor of XPath. OR remove it completely, as we don't
+     * extract anything useful here.
+     * 
+     * @author Cley Faye
+     */
     private class StylesReaderHandler extends DefaultHandler {
         private final Map<String, ImageInfo> mImagesMap;
         private final List<ImageInfo> mImages;
@@ -205,6 +257,11 @@ public class DocODT {
         }
     }
 
+    /**
+     * Get image informations from content.xml and styles.xml
+     * 
+     * This mainly extract print size from content.xml
+     */
     private void readImagesInfo() throws IOException,
             ParserConfigurationException, SAXException
     {
@@ -218,6 +275,7 @@ public class DocODT {
                 .parse(styleFile, new StylesReaderHandler(mImagesMap, mImages));
     }
 
+    /** A filter that process each image from source to destination. */
     public static interface ImageFilter {
         public boolean filterImage(File tempDir, ImageInfo imageInfo,
                 OutputStream output) throws Exception;
@@ -226,10 +284,26 @@ public class DocODT {
                 throws Exception;
     }
 
+    /**
+     * Save a copy of the ODT file.
+     * 
+     * This function create a copy of the original ODT file, and change it's
+     * content according to given filters.
+     * 
+     * @param target
+     *            The output file
+     * @param imageFilter
+     *            A filter for image files
+     * @return true if the process completed, false if it was interrupted by a
+     *         filter callback
+     * @throws Exception
+     */
     public boolean createCopy(File target, ImageFilter imageFilter)
             throws Exception
     {
         byte[] buffer = new byte[4096];
+        // First, we get new names for all pictures. Needed mainly to change
+        // from one file format to another
         Map<String, String> namesSubstitution = new HashMap();
         for (ImageInfo info : mImagesMap.values()) {
             if (!info.isEmbedded()) {
@@ -243,6 +317,7 @@ public class DocODT {
                     newSuffix);
             namesSubstitution.put(info.getRelativeName(), newName);
         }
+        // Create the output
         try (ZipOutputStream zipOutput = new ZipOutputStream(
                 new FileOutputStream(target))) {
             zipOutput.setLevel(9);
@@ -276,6 +351,7 @@ public class DocODT {
                     continue;
                 }
                 if (filePath.equals("styles.xml")) {
+                    // TODO treat special cases like this separately
                     zipOutput.putNextEntry(new ZipEntry("styles.xml"));
                     try (FileInputStream fis = new FileInputStream(new File(
                             mTempPath, "styles.xml"))) {
@@ -296,6 +372,7 @@ public class DocODT {
             }
             // Now we do pictures
             if (imageFilter == null) {
+                // TODO move this out of the way
                 imageFilter = new ImageFilter() {
 
                     @Override
@@ -343,6 +420,18 @@ public class DocODT {
     private static TransformerFactory sDOMOutFactory = TransformerFactory
             .newInstance();
 
+    /**
+     * Replace pictures path in content.xml
+     * 
+     * TODO Use XPath to make sure we won't miss anything
+     * 
+     * @param imageReplacements
+     *            List of filenames to replace
+     * @param input
+     *            Source content.xml
+     * @param output
+     *            Destination content.xml
+     */
     private void filterContent(Map<String, String> imageReplacements,
             InputStream input, OutputStream output)
             throws ParserConfigurationException, SAXException, IOException,
@@ -367,24 +456,24 @@ public class DocODT {
         transformer.transform(source, result);
     }
 
-    /*
-     * private void filterContent(Map<String, String> imageReplacements,
-     * InputStream input, OutputStream output) throws
-     * ParserConfigurationException, SAXException, IOException,
-     * TransformerException { StringBuilder builder = new StringBuilder();
-     * BufferedReader reader = new BufferedReader(new InputStreamReader(input,
-     * Charset.forName("UTF-8"))); String line; while ((line =
-     * reader.readLine()) != null) { builder.append(line); } String result =
-     * builder.toString(); for (String key : imageReplacements.keySet()) {
-     * result = result.replace(key, imageReplacements.get(key)); }
-     * output.write(result.getBytes(Charset.forName("UTF-8"))); }
-     */
-
+    /** Return the size of the original ODT file */
     public long getSize()
     {
         return mODTFile.length();
     }
 
+    /**
+     * Replace all files references in the manifest
+     * 
+     * TODO create manifest while saving instead of changing the old one
+     * 
+     * @param imageReplacements
+     *            Image names to replace
+     * @param input
+     *            Source manifest file
+     * @param output
+     *            Destination manifest file
+     */
     private void filterManifest(Map<String, String> imageReplacements,
             InputStream input, OutputStream output)
             throws ParserConfigurationException, SAXException, IOException,
@@ -409,6 +498,16 @@ public class DocODT {
         transformer.transform(source, result);
     }
 
+    /**
+     * Filter images path in styles.xml
+     * 
+     * @param imageReplacements
+     *            Image names replacements
+     * @param input
+     *            Source styles.xml
+     * @param output
+     *            Destination styles.xml
+     */
     private void filterStyles(Map<String, String> imageReplacements,
             InputStream input, OutputStream output)
             throws ParserConfigurationException, SAXException, IOException,
@@ -432,17 +531,4 @@ public class DocODT {
         StreamResult result = new StreamResult(output);
         transformer.transform(source, result);
     }
-
-    /*
-     * private void filterManifest(Map<String, String> imageReplacements,
-     * InputStream input, OutputStream output) throws
-     * ParserConfigurationException, SAXException, IOException,
-     * TransformerException { StringBuilder builder = new StringBuilder();
-     * BufferedReader reader = new BufferedReader(new InputStreamReader(input,
-     * Charset.forName("UTF-8"))); String line; while ((line =
-     * reader.readLine()) != null) { builder.append(line); } String result =
-     * builder.toString(); for (String key : imageReplacements.keySet()) {
-     * result = result.replace(key, imageReplacements.get(key)); }
-     * output.write(result.getBytes(Charset.forName("UTF-8"))); }
-     */
 }

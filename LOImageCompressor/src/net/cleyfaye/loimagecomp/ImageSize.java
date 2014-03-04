@@ -1,5 +1,12 @@
 package net.cleyfaye.loimagecomp;
 
+/**
+ * Store an image size.
+ * 
+ * TODO move size-related code here.
+ * 
+ * @author Cley Faye
+ */
 public class ImageSize {
 
     public ImageSize(double x, double y) {

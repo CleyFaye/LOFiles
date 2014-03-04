@@ -68,10 +68,23 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.ScrollPaneConstants;
 
-import net.cleyfaye.loimagecomp.DocODT.ImageFilter;
+import net.cleyfaye.loimagecomp.ODTFile.ImageFilter;
 
+/**
+ * Application main window
+ * 
+ * TODO Implement a controller somewhere to separate GUI and useful code
+ * 
+ * TODO Implement a CLI at some point
+ * 
+ * TODO Implement a margin at which the image are not actually resized (for
+ * example to not resize things from 500x500 to 498x498)
+ * 
+ * @author Cley Faye
+ */
 public class MainWindow {
 
+    // GUI stuff
     private JFrame mframe;
     private final Action actionOpen = new OpenAction();
     private final Action actionSave = new SaveAction();
@@ -80,6 +93,20 @@ public class MainWindow {
     private JSpinner mJpgQualitySpinner;
     private JComboBox mScalingMethodCombo;
     private JLabel mImageSizeLabel;
+    private JPanel mImageDetailsGroup;
+    private JLabel mTargetResLabel;
+    private JLabel mOriginalSizeLabel;
+    private JSpinner mTargetDPISpinner;
+    private JCheckBox mKillTransparencyCheck;
+
+    /** Currently open ODT file */
+    private ODTFile mDocODT;
+    /**
+     * Output DPI
+     * 
+     * TODO just implement a getter/setter for this that peek/poke the GUI
+     */
+    private double mDPI = 90;
 
     /**
      * Launch the application.
@@ -249,14 +276,7 @@ public class MainWindow {
         panel_3.add(mScalingMethodCombo);
     }
 
-    private DocODT mDocODT;
-    private JPanel mImageDetailsGroup;
-    private JLabel mTargetResLabel;
-    private JLabel mOriginalSizeLabel;
-    private double mDPI = 90;
-    private JSpinner mTargetDPISpinner;
-    private JCheckBox mKillTransparencyCheck;
-
+    /** Display current image details and projected size in the GUI */
     private void showImageDetails()
     {
         int index = mDetectedImagesList.getSelectedIndex();
@@ -278,6 +298,25 @@ public class MainWindow {
         mImageDetailsGroup.setVisible(true);
     }
 
+    /**
+     * Compute new image resolution after resizing.
+     * 
+     * This can shrink images, but never make them bigger. The new size will
+     * never be less than 1x1. If the draw size is less than 0.1x0.1, no
+     * resizing occurs (it's used to indicate that we don't know the intended
+     * print size).
+     * 
+     * TODO move this out of the GUI class!
+     * 
+     * @param originalSizePx
+     *            Original image size in pixels
+     * @param drawSizeCm
+     *            Intended print size in cm. If 0x0, it's supposed to be
+     *            unknown.
+     * @param dpi
+     *            Target DPI
+     * @return The new image size, in pixel.
+     */
     static private ImageSize projectImageSize(ImageSize originalSizePx,
             ImageSize drawSizeCm, double dpi)
     {
@@ -304,6 +343,15 @@ public class MainWindow {
         return targetSize;
     }
 
+    /**
+     * Convert a file size (in bytes) to a human readable string.
+     * 
+     * TODO move this into utility class
+     * 
+     * @param fileSize
+     *            The initial file size
+     * @return The size, in a string.
+     */
     private String fileSizeToString(long fileSize)
     {
         String[] suffixes = { "B", "kB", "MB", "GB", "TB" };
@@ -343,7 +391,7 @@ public class MainWindow {
                 fc.setFileFilter(filter);
                 int returnVal = fc.showOpenDialog(mframe);
                 if (returnVal == JFileChooser.APPROVE_OPTION) {
-                    mDocODT = new DocODT(fc.getSelectedFile());
+                    mDocODT = new ODTFile(fc.getSelectedFile());
                     refreshImagesList();
                 }
             } catch (Exception e2) {
@@ -449,25 +497,60 @@ public class MainWindow {
         }
     }
 
+    /**
+     * Return a file suffix.
+     * 
+     * TODO avoid issue when file don't have a suffix TODO move this in utility
+     * 
+     * @param str
+     *            The file name
+     * @return The file suffix (without the dot).
+     */
     public static String getFileSuffix(String str)
     {
         return str.substring(str.lastIndexOf('.') + 1);
     }
 
+    /**
+     * Replace a file suffix.
+     * 
+     * TODO avoid issue when file don't have a suffix TODO move this in utility
+     * 
+     * @param str
+     *            The file name
+     * @param suffix
+     *            The new file suffix
+     * @return The renammed file
+     */
     public static String replaceSuffix(String str, String suffix)
     {
         return str.substring(0, str.lastIndexOf('.') + 1) + suffix;
     }
 
+    /**
+     * Filter to resize images when saving ODT file.
+     * 
+     * TODO move this out of the GUI class!
+     * 
+     * @author Cley Faye
+     */
     private static class ImageFilterer implements ImageFilter {
 
+        /** Target DPI */
         private double mDPI;
+        /** Target JPG quality */
         private int mJPGQuality;
+        /** Target Interpolation mode */
         private Object mInterpolation;
+        /** Do we retain transparency or not */
         private boolean mKillTransparency;
+        /** Temporary directory for compressed images */
         private File mTempDir = Files.createTempDirectory("loimgcomp").toFile();
+        /** List of temporary files for each images path */
         private Map<String, File> mImageFiles = new HashMap<>();
+        /** Progress dialog */
         private ProgressMonitor mMonitor;
+        /** Number of images processed. This actually go up to 2*imagecount */
         private int mProcessedImages = 0;
 
         public ImageFilterer(double dpi, int jpgQuality, int scalingMethod,
@@ -493,6 +576,7 @@ public class MainWindow {
         public boolean filterImage(File tempDir, ImageInfo imageInfo,
                 OutputStream output) throws Exception
         {
+            // At this point, each pictures is already saved somewhere.
             if (mMonitor.isCanceled()) {
                 return false;
             }
@@ -513,6 +597,11 @@ public class MainWindow {
         public String filterImageSuffix(File tempDir, ImageInfo imageInfo)
                 throws Exception
         {
+            // This function is called one time on each image, before actually
+            // saving. Since we need to know the final image suffix at this
+            // point, we have to save in each format to see which one is most
+            // efficient.
+            // Temp save file is stored for the next step.
             if (mMonitor.isCanceled()) {
                 return null;
             }
