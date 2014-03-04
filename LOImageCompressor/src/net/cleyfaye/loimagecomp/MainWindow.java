@@ -59,6 +59,23 @@ import net.cleyfaye.loimagecomp.utils.ProgressCheck;
  */
 public class MainWindow implements Interface, ProgressCheck {
 
+    private File mDialogPath = null;
+
+    private static FileFilter mODTFileFilter = new FileFilter() {
+
+        @Override
+        public boolean accept(final File f)
+        {
+            return f.getName().endsWith(".odt") || f.isDirectory();
+        }
+
+        @Override
+        public String getDescription()
+        {
+            return "OpenDocument Text (*.odt)";
+        }
+    };
+
     private class OpenAction extends AbstractAction {
         private static final long serialVersionUID = 1L;
 
@@ -72,25 +89,12 @@ public class MainWindow implements Interface, ProgressCheck {
         {
             try {
                 final JFileChooser fc = new JFileChooser();
-                // TODO move this out
-                final FileFilter filter = new FileFilter() {
-
-                    @Override
-                    public boolean accept(final File f)
-                    {
-                        return f.getName().endsWith(".odt") || f.isDirectory();
-                    }
-
-                    @Override
-                    public String getDescription()
-                    {
-                        return "OpenDocument Text (*.odt)";
-                    }
-                };
-                fc.addChoosableFileFilter(filter);
-                fc.setFileFilter(filter);
+                fc.addChoosableFileFilter(mODTFileFilter);
+                fc.setFileFilter(mODTFileFilter);
+                fc.setCurrentDirectory(mDialogPath);
                 final int returnVal = fc.showOpenDialog(mframe);
                 if (returnVal == JFileChooser.APPROVE_OPTION) {
+                    mDialogPath = fc.getCurrentDirectory();
                     mController.openFile(fc.getSelectedFile(), mDiz);
                     mOriginalSize = fc.getSelectedFile().length();
                 }
@@ -116,26 +120,14 @@ public class MainWindow implements Interface, ProgressCheck {
             }
             try {
                 final JFileChooser fc = new JFileChooser();
-                final FileFilter filter = new FileFilter() {
-
-                    @Override
-                    public boolean accept(final File f)
-                    {
-                        return f.getName().endsWith(".odt") || f.isDirectory();
-                    }
-
-                    @Override
-                    public String getDescription()
-                    {
-                        return "OpenDocument Text (*.odt)";
-                    }
-                };
-                fc.addChoosableFileFilter(filter);
-                fc.setFileFilter(filter);
+                fc.addChoosableFileFilter(mODTFileFilter);
+                fc.setFileFilter(mODTFileFilter);
+                fc.setCurrentDirectory(mDialogPath);
                 final int returnVal = fc.showSaveDialog(mframe);
                 if (returnVal != JFileChooser.APPROVE_OPTION) {
                     return;
                 }
+                mDialogPath = fc.getCurrentDirectory();
                 // TODO Maybe swingworker isn't the best choice here
                 final SwingWorker<Integer, Integer> sw = new SwingWorker<Integer, Integer>() {
 
