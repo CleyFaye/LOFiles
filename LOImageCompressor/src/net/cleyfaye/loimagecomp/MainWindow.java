@@ -42,12 +42,12 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.filechooser.FileFilter;
 
-import net.cleyfaye.loimagecomp.imagecompress.Controller;
-import net.cleyfaye.loimagecomp.imagecompress.Controller.SampleQuality;
 import net.cleyfaye.loimagecomp.imagecompress.ImageCompress;
 import net.cleyfaye.loimagecomp.imagecompress.ImageInfo;
 import net.cleyfaye.loimagecomp.imagecompress.ImageSize;
-import net.cleyfaye.loimagecomp.imagecompress.Interface;
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller;
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller.SampleQuality;
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.Interface;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
 
 /**

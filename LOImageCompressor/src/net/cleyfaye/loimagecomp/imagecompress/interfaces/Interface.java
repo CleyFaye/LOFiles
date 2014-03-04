@@ -1,8 +1,9 @@
-package net.cleyfaye.loimagecomp.imagecompress;
+package net.cleyfaye.loimagecomp.imagecompress.interfaces;
 
 import java.util.List;
 
-import net.cleyfaye.loimagecomp.imagecompress.Controller.SampleQuality;
+import net.cleyfaye.loimagecomp.imagecompress.ImageInfo;
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller.SampleQuality;
 
 /**
  * Interface to get/display info.

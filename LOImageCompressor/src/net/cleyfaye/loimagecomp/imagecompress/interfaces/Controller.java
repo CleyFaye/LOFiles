@@ -1,4 +1,4 @@
-package net.cleyfaye.loimagecomp.imagecompress;
+package net.cleyfaye.loimagecomp.imagecompress.interfaces;
 
 import java.io.File;
 

@@ -8,7 +8,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import net.cleyfaye.loimagecomp.imagecompress.ODTFile.ImageFilter;
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.ImageFilter;
 
 /**
  * Dummy filter. Pass images through.

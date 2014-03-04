@@ -1,12 +1,10 @@
 package net.cleyfaye.loimagecomp.imagecompress;
 
-import static net.cleyfaye.loimagecomp.utils.Utils.getFileSuffix;
 import static net.cleyfaye.loimagecomp.utils.Utils.replaceFileSuffix;
 import static net.cleyfaye.loimagecomp.utils.Utils.sizeStringToDouble;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,6 +30,7 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.ImageFilter;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck.Instance;
 
@@ -94,8 +93,8 @@ public class ODTFile {
                         mImagesMap.get(mFileName).increaseDrawSize(
                                 mReadingWidth, mReadingHeight);
                     } else {
-                        final ImageInfo info = new ImageInfo(mTempPath,
-                                mFileName, mReadingWidth, mReadingHeight);
+                        final ImageInfo info = new ImageInfo(mDiz, mFileName,
+                                mReadingWidth, mReadingHeight);
                         mImagesMap.put(mFileName, info);
                         mImages.add(info);
                     }
@@ -129,15 +128,6 @@ public class ODTFile {
         }
     }
 
-    /** A filter that process each image from source to destination. */
-    public static interface ImageFilter {
-        public boolean filterImage(File tempDir, ImageInfo imageInfo,
-                OutputStream output) throws Exception;
-
-        public String filterImageSuffix(File tempDir, ImageInfo imageInfo)
-                throws Exception;
-    }
-
     /**
      * Get image information from styles.xml.
      * 
@@ -165,8 +155,8 @@ public class ODTFile {
                 if (qName.equals("draw:fill-image")) {
                     final String fileName = attributes.getValue("xlink:href");
                     if (!mImagesMap.containsKey(fileName)) {
-                        final ImageInfo info = new ImageInfo(mTempPath,
-                                fileName, 0, 0);
+                        final ImageInfo info = new ImageInfo(mDiz, fileName, 0,
+                                0);
                         mImagesMap.put(fileName, info);
                         mImages.add(info);
                     }
@@ -176,6 +166,8 @@ public class ODTFile {
             }
         }
     }
+
+    private final ODTFile mDiz = this;
 
     /** The origianl ODT file. */
     private final File mODTFile;
@@ -481,6 +473,24 @@ public class ODTFile {
         final DOMSource source = new DOMSource(doc);
         final StreamResult result = new StreamResult(output);
         transformer.transform(source, result);
+    }
+
+    /**
+     * Return a file from the original ODT source.
+     * 
+     * @param fileName
+     *            The relative file name
+     * @return The file object, or null if the file doesn't exist.
+     */
+    @SuppressWarnings("resource")
+    public File getExtractedFile(final String fileName) throws IOException
+    {
+        final File relativePath = new File(fileName);
+        if (relativePath.isAbsolute()) {
+            return null;
+        }
+        final File resultFile = new File(mTempPath, fileName);
+        return resultFile.exists() ? resultFile : null;
     }
 
     /** Return the selected image informations */

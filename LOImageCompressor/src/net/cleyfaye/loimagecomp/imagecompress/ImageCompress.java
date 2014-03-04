@@ -6,7 +6,9 @@ import java.util.List;
 
 import javax.xml.parsers.ParserConfigurationException;
 
-import net.cleyfaye.loimagecomp.imagecompress.ODTFile.ImageFilter;
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller;
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.ImageFilter;
+import net.cleyfaye.loimagecomp.imagecompress.interfaces.Interface;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck.Instance;
 

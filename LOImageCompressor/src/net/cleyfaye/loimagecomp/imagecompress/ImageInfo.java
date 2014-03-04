@@ -10,14 +10,14 @@ import javax.imageio.ImageIO;
  * Store informations about an image.
  * 
  * This class hold the image path, the intended print size, and the original
- * resolution.
- * 
- * TODO Add a reference to the ODTFile object, for future use
+ * resolution, as well as the target DPI and resolution.
  * 
  * @author Cley Faye
  */
 public class ImageInfo {
 
+    /** Source ODT file */
+    private final ODTFile mODTFile;
     /** Maximum intended print size in cm */
     private final ImageSize mDrawSizeCm;
     /** Relative file name */
@@ -32,18 +32,23 @@ public class ImageInfo {
     private boolean mEmbedded;
     /** The original image file */
     private File mFile;
+    /** The target DPI */
+    private double mTargetDPI = 90;
+    /** Target resolution */
+    private ImageSize mTargetImageSizePx;
 
-    public ImageInfo(final File tempDir, final String fileName,
+    public ImageInfo(final ODTFile odtFile, final String fileName,
             final double drawWidthCm, final double drawHeightCm)
             throws IOException {
+        mODTFile = odtFile;
         mDrawSizeCm = new ImageSize(drawWidthCm, drawHeightCm);
         mFileName = fileName;
         final File imageFile = new File(fileName);
         if (imageFile.isAbsolute()) {
             mEmbedded = false;
         } else {
-            mFile = new File(tempDir, fileName);
-            mEmbedded = mFile.exists();
+            mFile = mODTFile.getExtractedFile(fileName);
+            mEmbedded = mFile != null;
         }
         if (mEmbedded) {
             final BufferedImage img = ImageIO.read(mFile);
@@ -54,7 +59,13 @@ public class ImageInfo {
 
     public ImageSize getDrawSizeCm()
     {
-        return mDrawSizeCm;
+        return new ImageSize(mDrawSizeCm);
+    }
+
+    /** Return the original image file */
+    public File getFile()
+    {
+        return mFile;
     }
 
     public long getImageSize()
@@ -64,13 +75,18 @@ public class ImageInfo {
 
     public ImageSize getImageSizePx()
     {
-        return mImageSizePx;
+        return new ImageSize(mImageSizePx);
     }
 
     /** Return the image relative name */
     public String getRelativeName()
     {
         return mFileName;
+    }
+
+    public ImageSize getTargetImageSize()
+    {
+        return new ImageSize(mTargetImageSizePx);
     }
 
     /**
@@ -107,5 +123,15 @@ public class ImageInfo {
     public boolean isEmbedded()
     {
         return mEmbedded;
+    }
+
+    /** Change this image's target DPI */
+    public void setTargetDPI(final double value)
+    {
+        mTargetDPI = value;
+        if (!mEmbedded) {
+            mTargetImageSizePx = ImageSize.projectImageSize(mImageSizePx,
+                    mDrawSizeCm, mTargetDPI);
+        }
     }
 }
