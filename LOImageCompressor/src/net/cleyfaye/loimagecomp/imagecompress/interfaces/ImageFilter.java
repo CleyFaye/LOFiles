@@ -33,9 +33,9 @@ public interface ImageFilter {
      * 
      * @param imageInfo
      *            The image info
-     * @return The image suffix ("jpg" or "png").
+     * @return The image filename
      */
-    public String getImageSuffix(ImageInfo imageInfo) throws Exception;
+    public String getImageFileName(ImageInfo imageInfo) throws Exception;
 
     /**
      * Called on each image once to prepare it.

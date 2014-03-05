@@ -1,7 +1,5 @@
 package net.cleyfaye.loimagecomp.imagecompress;
 
-import static net.cleyfaye.loimagecomp.utils.Utils.getFileSuffix;
-
 import java.io.FileInputStream;
 import java.io.OutputStream;
 
@@ -28,9 +26,9 @@ public class DummyImageFilter implements ImageFilter {
     }
 
     @Override
-    public String getImageSuffix(final ImageInfo imageInfo) throws Exception
+    public String getImageFileName(final ImageInfo imageInfo) throws Exception
     {
-        return getFileSuffix(imageInfo.getRelativeName());
+        return imageInfo.getRelativeName();
     }
 
     @Override

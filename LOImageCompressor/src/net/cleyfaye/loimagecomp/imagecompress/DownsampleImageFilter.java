@@ -40,6 +40,7 @@ public class DownsampleImageFilter implements ImageFilter {
             .toFile();
     /** List of temporary files for each images path */
     private final Map<String, File> mImageFiles = new HashMap<>();
+    private final Map<String, String> mImageSuffixes = new HashMap<>();
 
     public DownsampleImageFilter(final int jpgQuality, final int scalingMethod,
             final boolean killTransparency) throws IOException {
@@ -74,10 +75,11 @@ public class DownsampleImageFilter implements ImageFilter {
     }
 
     @Override
-    public String getImageSuffix(final ImageInfo imageInfo) throws Exception
+    public String getImageFileName(final ImageInfo imageInfo) throws Exception
     {
-        return Utils.getFileSuffix(mImageFiles.get(imageInfo.getRelativeName())
-                .getName());
+        String originalName = imageInfo.getRelativeName();
+        return Utils.replaceFileSuffix(originalName,
+                mImageSuffixes.get(originalName));
     }
 
     @Override
@@ -137,10 +139,12 @@ public class DownsampleImageFilter implements ImageFilter {
                 // Use png
                 tempJPG.delete();
                 mImageFiles.put(imageInfo.getRelativeName(), tempPNG);
+                mImageSuffixes.put(imageInfo.getRelativeName(), "png");
             } else {
                 // Use jpg
                 tempPNG.delete();
                 mImageFiles.put(imageInfo.getRelativeName(), tempJPG);
+                mImageSuffixes.put(imageInfo.getRelativeName(), "jpg");
             }
         } else {
             // Save as png
@@ -157,6 +161,7 @@ public class DownsampleImageFilter implements ImageFilter {
                 }
             }
             mImageFiles.put(imageInfo.getRelativeName(), tempPNG);
+            mImageSuffixes.put(imageInfo.getRelativeName(), "png");
         }
     }
 

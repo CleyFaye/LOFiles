@@ -15,6 +15,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -64,6 +65,8 @@ public class ODTFile {
     private Document mContent;
     /** DOM of styles.xml */
     private Document mStyles;
+    /** DOM of initial manifest */
+    private Document mManifest;
 
     /** The origianl ODT file. */
     private final File mODTFile;
@@ -144,13 +147,14 @@ public class ODTFile {
     {
         final Instance progress = new Instance(progressCheck);
         progress.progressNewMaxValue(mImagesMap.values().size() * 3
-                + mFiles.size());
+                + mFiles.size() + 4); // 4: mimetype content.xml styles.xml
+                                      // manifest
         int progressValue = 0;
         final byte[] buffer = new byte[4096];
-        // First, we get new names for all pictures. Needed mainly to change
+        // We get new names for all pictures. Needed mainly to change
         // from one file format to another
         final Map<String, String> namesSubstitution = new HashMap<>();
-        progress.progressMessage("Preparing images");
+        progress.progressMessage("Preparing");
         for (final ImageInfo info : mImagesMap.values()) {
             if (!progress.progress(++progressValue)) {
                 return false;
@@ -167,74 +171,69 @@ public class ODTFile {
             if (!info.isEmbedded()) {
                 continue;
             }
-            final String newSuffix = imageFilter.getImageSuffix(info);
-            final String newName = replaceFileSuffix(info.getRelativeName(),
-                    newSuffix);
+            final String newName = imageFilter.getImageFileName(info);
             namesSubstitution.put(info.getRelativeName(), newName);
         }
-        progress.progressMessage("Saving base content");
+        // We work on copies of content.xml and styles.xml
+        Document contentCopy = Utils.cloneDOM(mContent);
+        Document stylesCopy = Utils.cloneDOM(mStyles);
+        Document manifestCopy = Utils.cloneDOM(mManifest);
+
         // Create the output
         try (ZipOutputStream zipOutput = new ZipOutputStream(
                 new FileOutputStream(target))) {
-            zipOutput.setLevel(9);
-            for (final String filePath : mFiles) {
+
+            progress.progressMessage("Core content");
+            // First save mimetype
+            zipOutput.setLevel(0);
+            zipOutput.setMethod(ZipOutputStream.STORED);
+
+            {
+                byte[] mimetypeBytes = "application/vnd.oasis.opendocument.text"
+                        .getBytes(Charset.forName("ASCII"));
+                ZipEntry mimetypeEntry = new ZipEntry("mimetype");
+                mimetypeEntry.setMethod(ZipEntry.STORED);
+                mimetypeEntry.setCompressedSize(mimetypeBytes.length);
+                mimetypeEntry.setSize(mimetypeBytes.length);
+                CRC32 crc = new CRC32();
+                crc.update(mimetypeBytes);
+                mimetypeEntry.setCrc(crc.getValue());
+                zipOutput.putNextEntry(mimetypeEntry);
+                zipOutput.write(mimetypeBytes);
                 if (!progress.progress(++progressValue)) {
                     return false;
                 }
-                // TODO better code here
-                if (filePath.startsWith("Pictures/")) {
-                    // We'll do pictures at the end
-                    continue;
-                }
-                if (filePath.equals("content.xml")) {
-                    // This one is special. file names might change.
-                    zipOutput.putNextEntry(new ZipEntry("content.xml"));
-                    try (FileInputStream fis = new FileInputStream(new File(
-                            mTempPath, "content.xml"))) {
-                        filterContent(namesSubstitution, fis, zipOutput);
-                    }
-                    zipOutput.closeEntry();
-                    continue;
-                }
-                if (filePath.equals("META-INF/manifest.xml")) {
-                    // Special too. If we don't "fix" the manifest, LO gets all
-                    // wonkytonky
-                    // Note: I could generate a new "legit" manifest. But it's
-                    // outside the scope of this exercise :)
-                    zipOutput
-                            .putNextEntry(new ZipEntry("META-INF/manifest.xml"));
-                    try (FileInputStream fis = new FileInputStream(new File(
-                            mTempPath, "META-INF/manifest.xml"))) {
-                        filterManifest(namesSubstitution, fis, zipOutput);
-                    }
-                    zipOutput.closeEntry();
-                    continue;
-                }
-                if (filePath.equals("styles.xml")) {
-                    // TODO treat special cases like this separately
-                    zipOutput.putNextEntry(new ZipEntry("styles.xml"));
-                    try (FileInputStream fis = new FileInputStream(new File(
-                            mTempPath, "styles.xml"))) {
-                        filterStyles(namesSubstitution, fis, zipOutput);
-                    }
-                    zipOutput.closeEntry();
-                    continue;
-                }
-                zipOutput.putNextEntry(new ZipEntry(filePath));
-                try (FileInputStream input = new FileInputStream(new File(
-                        mTempPath, filePath))) {
-                    int length;
-                    while ((length = input.read(buffer)) > 0) {
-                        zipOutput.write(buffer, 0, length);
-                    }
-                }
-                zipOutput.closeEntry();
             }
-            // Now we do pictures
+
+            // Then save content.xml and styles.xml
+            zipOutput.setMethod(ZipOutputStream.DEFLATED);
+            zipOutput.setLevel(9);
+            zipOutput.putNextEntry(new ZipEntry("content.xml"));
+            filterContent(namesSubstitution, contentCopy);
+            Utils.saveDOM(contentCopy, zipOutput);
+            if (!progress.progress(++progressValue)) {
+                return false;
+            }
+            zipOutput.putNextEntry(new ZipEntry("styles.xml"));
+            filterStyles(namesSubstitution, stylesCopy);
+            Utils.saveDOM(stylesCopy, zipOutput);
+            if (!progress.progress(++progressValue)) {
+                return false;
+            }
+
+            // Save manifest.xml
+            zipOutput.putNextEntry(new ZipEntry("META-INF/manifest.xml"));
+            filterManifest(namesSubstitution, manifestCopy);
+            Utils.saveDOM(manifestCopy, zipOutput);
+            if (!progress.progress(++progressValue)) {
+                return false;
+            }
+
+            // Save all pictures
+            progress.progressMessage("Images");
             if (imageFilter == null) {
                 imageFilter = new DummyImageFilter();
             }
-            progress.progressMessage("Saving images");
             for (final ImageInfo info : mImagesMap.values()) {
                 if (!progress.progress(++progressValue)) {
                     return false;
@@ -247,6 +246,24 @@ public class ODTFile {
                 imageFilter.getImageData(info, zipOutput);
                 zipOutput.closeEntry();
             }
+
+            // Save all remaining files
+            progress.progressMessage("Remaining files");
+            for (final String filePath : mFiles) {
+                if (!progress.progress(++progressValue)) {
+                    return false;
+                }
+                zipOutput.putNextEntry(new ZipEntry(filePath));
+                try (FileInputStream input = new FileInputStream(new File(
+                        mTempPath, filePath))) {
+                    int length;
+                    while ((length = input.read(buffer)) > 0) {
+                        zipOutput.write(buffer, 0, length);
+                    }
+                }
+                zipOutput.closeEntry();
+            }
+
         }
         return true;
     }
@@ -269,10 +286,16 @@ public class ODTFile {
                     while ((readCount = zipInput.read(buffer)) > 0) {
                         output.write(buffer, 0, readCount);
                     }
-                    mFiles.add(fileName);
                 }
-                if (fileName.startsWith("Pictures/")) {
+                if (fileName.equals("mimetype")
+                        || fileName.equals("content.xml")
+                        || fileName.equals("styles.xml")
+                        || fileName.equals("META-INF/manifest.xml")) {
+                    // Don't store them in mFiles
+                } else if (fileName.startsWith("Pictures/")) {
                     mImagesMap.put(fileName, new ImageInfo(this, fileName));
+                } else {
+                    mFiles.add(fileName);
                 }
             }
         }
@@ -281,24 +304,20 @@ public class ODTFile {
     /**
      * Replace pictures path in content.xml
      * 
-     * TODO Use XPath to make sure we won't miss anything
-     * 
      * @param imageReplacements
      *            List of filenames to replace
      * @param input
      *            Source content.xml
-     * @param output
-     *            Destination content.xml
      */
     private void filterContent(final Map<String, String> imageReplacements,
-            final InputStream input, final OutputStream output)
-            throws ParserConfigurationException, SAXException, IOException,
-            TransformerException
+            final Document input) throws ParserConfigurationException,
+            SAXException, IOException, TransformerException,
+            XPathExpressionException
     {
-        final DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
-        final Document doc = builder.parse(input);
-
-        final NodeList nodes = doc.getElementsByTagName("draw:image");
+        XPathExpression expr = sXPath
+                .compile("//*[@*[name()='xlink:href' and starts-with(., 'Pictures/')]]");
+        final NodeList nodes = (NodeList) expr.evaluate(input,
+                XPathConstants.NODESET);
         for (int i = 0; i < nodes.getLength(); ++i) {
             final Node node = nodes.item(i);
             final NamedNodeMap attributes = node.getAttributes();
@@ -308,10 +327,6 @@ public class ODTFile {
                         .getTextContent()));
             }
         }
-        final Transformer transformer = sDOMOutFactory.newTransformer();
-        final DOMSource source = new DOMSource(doc);
-        final StreamResult result = new StreamResult(output);
-        transformer.transform(source, result);
     }
 
     /**
@@ -323,18 +338,13 @@ public class ODTFile {
      *            Image names to replace
      * @param input
      *            Source manifest file
-     * @param output
-     *            Destination manifest file
      */
     private void filterManifest(final Map<String, String> imageReplacements,
-            final InputStream input, final OutputStream output)
-            throws ParserConfigurationException, SAXException, IOException,
-            TransformerException
+            final Document input) throws ParserConfigurationException,
+            SAXException, IOException, TransformerException
     {
-        final DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
-        final Document doc = builder.parse(input);
-
-        final NodeList nodes = doc.getElementsByTagName("manifest:file-entry");
+        final NodeList nodes = input
+                .getElementsByTagName("manifest:file-entry");
         for (int i = 0; i < nodes.getLength(); ++i) {
             final Node node = nodes.item(i);
             final NamedNodeMap attributes = node.getAttributes();
@@ -344,10 +354,6 @@ public class ODTFile {
                         .getTextContent()));
             }
         }
-        final Transformer transformer = sDOMOutFactory.newTransformer();
-        final DOMSource source = new DOMSource(doc);
-        final StreamResult result = new StreamResult(output);
-        transformer.transform(source, result);
     }
 
     /**
@@ -357,18 +363,16 @@ public class ODTFile {
      *            Image names replacements
      * @param input
      *            Source styles.xml
-     * @param output
-     *            Destination styles.xml
      */
     private void filterStyles(final Map<String, String> imageReplacements,
-            final InputStream input, final OutputStream output)
-            throws ParserConfigurationException, SAXException, IOException,
-            TransformerException
+            final Document input) throws ParserConfigurationException,
+            SAXException, IOException, TransformerException,
+            XPathExpressionException
     {
-        final DocumentBuilder builder = sDOMFactory.newDocumentBuilder();
-        final Document doc = builder.parse(input);
-
-        final NodeList nodes = doc.getElementsByTagName("draw:fill-image");
+        XPathExpression expr = sXPath
+                .compile("//*[@*[name()='xlink:href' and starts-with(., 'Pictures/')]]");
+        final NodeList nodes = (NodeList) expr.evaluate(input,
+                XPathConstants.NODESET);
         for (int i = 0; i < nodes.getLength(); ++i) {
             final Node node = nodes.item(i);
             final NamedNodeMap attributes = node.getAttributes();
@@ -378,10 +382,6 @@ public class ODTFile {
                         .getTextContent()));
             }
         }
-        final Transformer transformer = sDOMOutFactory.newTransformer();
-        final DOMSource source = new DOMSource(doc);
-        final StreamResult result = new StreamResult(output);
-        transformer.transform(source, result);
     }
 
     /** Return the selected image informations */
@@ -501,12 +501,15 @@ public class ODTFile {
             throws ParserConfigurationException, SAXException, IOException
     {
         progress.progressMessage("Reading content");
-        progress.progressNewMaxValue(2);
+        progress.progressNewMaxValue(3);
         if (sDocumentBuilder == null) {
             sDocumentBuilder = sDOMFactory.newDocumentBuilder();
         }
         mContent = sDocumentBuilder.parse(getExtractedFile("content.xml"));
         progress.progress(1);
         mStyles = sDocumentBuilder.parse(getExtractedFile("styles.xml"));
+        progress.progress(2);
+        mManifest = sDocumentBuilder
+                .parse(getExtractedFile("META-INF/manifest.xml"));
     }
 }
