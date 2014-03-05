@@ -2,9 +2,11 @@ package net.cleyfaye.loimagecomp.imagecompress;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.XPathExpressionException;
 
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller;
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.ImageFilter;
@@ -63,12 +65,13 @@ public class ImageCompress implements Controller, Interface {
 
     @Override
     public void openFile(final File odtFile, final ProgressCheck progressCheck)
-            throws IOException, ParserConfigurationException, SAXException
+            throws IOException, ParserConfigurationException, SAXException,
+            XPathExpressionException
     {
         final Instance progress = new Instance(progressCheck);
         progress.startProgress("Loading file");
         mODTFile = new ODTFile(odtFile, progress);
-        updateImagesList(mODTFile.mImages);
+        updateImagesList(new ArrayList<>(mODTFile.getAllImageInfo()));
         progress.endProgress();
     }
 

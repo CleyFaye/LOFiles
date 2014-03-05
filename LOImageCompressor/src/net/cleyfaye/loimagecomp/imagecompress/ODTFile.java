@@ -1,7 +1,6 @@
 package net.cleyfaye.loimagecomp.imagecompress;
 
 import static net.cleyfaye.loimagecomp.utils.Utils.replaceFileSuffix;
-import static net.cleyfaye.loimagecomp.utils.Utils.sizeStringToDouble;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -12,6 +11,7 @@ import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,25 +22,27 @@ import java.util.zip.ZipOutputStream;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.ImageFilter;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
-import net.cleyfaye.loimagecomp.utils.Utils;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck.Instance;
+import net.cleyfaye.loimagecomp.utils.Utils;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
-import org.xml.sax.helpers.DefaultHandler;
 
 /**
  * Manage the content of an ODT file
@@ -54,121 +56,14 @@ import org.xml.sax.helpers.DefaultHandler;
  * 
  * TODO Force save of the mimetype as uncompressed
  * 
- * TODO Load the original document as DOM instead of using SAX
- * 
- * TODO Use XPath
- * 
  * @author Cley Faye
  */
 public class ODTFile {
 
-    /**
-     * SAX handler to get image print size from the content.xml
-     * 
-     * TODO remove this in favor of XPath
-     * 
-     * @author Cley Faye
-     */
-    private class ContentReaderHandler extends DefaultHandler {
-        private boolean mReadingFrame = false;
-        private double mReadingWidth = 0;
-        private double mReadingHeight = 0;
-        private String mFileName;
-        private final Map<String, ImageInfo> mImagesMap;
-        private final List<ImageInfo> mImages;
-
-        public ContentReaderHandler(final Map<String, ImageInfo> imagesMap,
-                final List<ImageInfo> images) {
-            mImagesMap = imagesMap;
-            mImages = images;
-        }
-
-        @Override
-        public void endElement(final String uri, final String localName,
-                final String qName) throws SAXException
-        {
-            try {
-                if (qName.equals("draw:frame") && mReadingFrame) {
-                    mReadingFrame = false;
-                    if (mImagesMap.containsKey(mFileName)) {
-                        mImagesMap.get(mFileName).increaseDrawSize(
-                                mReadingWidth, mReadingHeight);
-                    } else {
-                        final ImageInfo info = new ImageInfo(mDiz, mFileName,
-                                mReadingWidth, mReadingHeight);
-                        mImagesMap.put(mFileName, info);
-                        mImages.add(info);
-                    }
-                }
-            } catch (final IOException e) {
-                throw new SAXException(e);
-            }
-        }
-
-        @Override
-        public void startElement(final String uri, final String localName,
-                final String qName, final org.xml.sax.Attributes attributes)
-                throws SAXException
-        {
-            try {
-                if (qName.equals("draw:frame")) {
-                    mReadingFrame = true;
-                    mReadingWidth = sizeStringToDouble(attributes
-                            .getValue("svg:width"));
-                    mReadingHeight = sizeStringToDouble(attributes
-                            .getValue("svg:height"));
-                }
-                if (mReadingFrame) {
-                    if (qName.equals("draw:image")) {
-                        mFileName = attributes.getValue("xlink:href");
-                    }
-                }
-            } catch (final IOException e) {
-                throw new SAXException(e);
-            }
-        }
-    }
-
-    /**
-     * Get image information from styles.xml.
-     * 
-     * TODO remove this in favor of XPath. OR remove it completely, as we don't
-     * extract anything useful here.
-     * 
-     * @author Cley Faye
-     */
-    private class StylesReaderHandler extends DefaultHandler {
-        private final Map<String, ImageInfo> mImagesMap;
-        private final List<ImageInfo> mImages;
-
-        public StylesReaderHandler(final Map<String, ImageInfo> imagesMap,
-                final List<ImageInfo> images) {
-            mImagesMap = imagesMap;
-            mImages = images;
-        }
-
-        @Override
-        public void startElement(final String uri, final String localName,
-                final String qName, final org.xml.sax.Attributes attributes)
-                throws SAXException
-        {
-            try {
-                if (qName.equals("draw:fill-image")) {
-                    final String fileName = attributes.getValue("xlink:href");
-                    if (!mImagesMap.containsKey(fileName)) {
-                        final ImageInfo info = new ImageInfo(mDiz, fileName, 0,
-                                0);
-                        mImagesMap.put(fileName, info);
-                        mImages.add(info);
-                    }
-                }
-            } catch (final IOException e) {
-                throw new SAXException(e);
-            }
-        }
-    }
-
-    private final ODTFile mDiz = this;
+    /** DOM of content.xml */
+    private Document mContent;
+    /** DOM of styles.xml */
+    private Document mStyles;
 
     /** The origianl ODT file. */
     private final File mODTFile;
@@ -185,26 +80,32 @@ public class ODTFile {
      */
     private final Map<String, ImageInfo> mImagesMap = new HashMap<>();
 
-    /** All the image informations objects */
-    final List<ImageInfo> mImages = new ArrayList<>();
-
-    private static SAXParserFactory sSAXFactory = SAXParserFactory
-            .newInstance();
-
     private static DocumentBuilderFactory sDOMFactory = DocumentBuilderFactory
             .newInstance();
 
     private static TransformerFactory sDOMOutFactory = TransformerFactory
             .newInstance();
 
-    /** Create an ODTFile object from an existing ODT file */
+    private static DocumentBuilder sDocumentBuilder = null;
+
+    private static XPathFactory sXPathFactory = XPathFactory.newInstance();
+
+    private static XPath sXPath = sXPathFactory.newXPath();
+
+    /**
+     * Create an ODTFile object from an existing ODT file
+     * 
+     * @throws XPathExpressionException
+     */
     public ODTFile(final File odtFile, final ProgressCheck progressCheck)
-            throws IOException, ParserConfigurationException, SAXException {
+            throws IOException, ParserConfigurationException, SAXException,
+            XPathExpressionException {
         final Instance progress = new Instance(progressCheck);
         mTempPath.deleteOnExit();
         mODTFile = odtFile;
         extractFiles(progress);
         checkMimeType(progress);
+        readXMLs(progress);
         readImagesInfo(progress);
     }
 
@@ -370,6 +271,9 @@ public class ODTFile {
                     }
                     mFiles.add(fileName);
                 }
+                if (fileName.startsWith("Pictures/")) {
+                    mImagesMap.put(fileName, new ImageInfo(this, fileName));
+                }
             }
         }
     }
@@ -480,6 +384,12 @@ public class ODTFile {
         transformer.transform(source, result);
     }
 
+    /** Return the selected image informations */
+    public Collection<ImageInfo> getAllImageInfo()
+    {
+        return mImagesMap.values();
+    }
+
     /**
      * Return a file from the original ODT source.
      * 
@@ -487,7 +397,6 @@ public class ODTFile {
      *            The relative file name
      * @return The file object, or null if the file doesn't exist.
      */
-    @SuppressWarnings("resource")
     public File getExtractedFile(final String fileName) throws IOException
     {
         final File relativePath = new File(fileName);
@@ -498,16 +407,10 @@ public class ODTFile {
         return resultFile.exists() ? resultFile : null;
     }
 
-    /** Return the selected image informations */
-    public ImageInfo getImageInfo(final int index)
-    {
-        return mImages.get(index);
-    }
-
     /** Return the number of images in the file */
     public int getImagesCount()
     {
-        return mImages.size();
+        return mImagesMap.size();
     }
 
     /** Return the size of the original ODT file */
@@ -520,18 +423,90 @@ public class ODTFile {
      * Get image informations from content.xml and styles.xml
      * 
      * This mainly extract print size from content.xml
+     * 
+     * @throws XPathExpressionException
      */
     private void readImagesInfo(final ProgressCheck progress)
-            throws IOException, ParserConfigurationException, SAXException
+            throws IOException, ParserConfigurationException, SAXException,
+            XPathExpressionException
     {
         progress.progressMessage("Reading image informations");
-        final File contentFile = new File(mTempPath, "content.xml");
-        final File styleFile = new File(mTempPath, "styles.xml");
-        final SAXParser saxParser = sSAXFactory.newSAXParser();
+        int progressValue = 0;
+        final XPathExpression contentImageExpression = sXPath
+                .compile("//*[name()='draw:frame']/*[name()='draw:image'][@*[name()='xlink:href' and starts-with(., 'Pictures/')]]");
+        final XPathExpression stylesImageExpression = sXPath
+                .compile("//*[@*[name()='xlink:href' and starts-with(., 'Pictures/')]]");
+        final NodeList contentImageNodes = (NodeList) contentImageExpression
+                .evaluate(mContent, XPathConstants.NODESET);
+        final NodeList styleImageNodes = (NodeList) stylesImageExpression
+                .evaluate(mStyles, XPathConstants.NODESET);
+        progress.progressNewMaxValue(contentImageNodes.getLength()
+                + styleImageNodes.getLength() + 1);
+        for (int i = 0; i < contentImageNodes.getLength(); ++i) {
+            final Node node = contentImageNodes.item(i);
+            final Node parentNode = node.getParentNode();
+            if (parentNode.getNodeName().equals("draw:frame")) {
+                final String imagePath = node.getAttributes()
+                        .getNamedItem("xlink:href").getTextContent();
+                final NamedNodeMap parentNodeAttributes = parentNode
+                        .getAttributes();
+                final ImageInfo imageInfo = mImagesMap.get(imagePath);
+                final Node widthItem = parentNodeAttributes
+                        .getNamedItem("svg:width");
+                final Node heightItem = parentNodeAttributes
+                        .getNamedItem("svg:height");
+                if (widthItem != null && heightItem != null) {
+                    final double drawWidth = Utils.sizeStringToDouble(widthItem
+                            .getTextContent());
+                    final double drawHeight = Utils
+                            .sizeStringToDouble(heightItem.getTextContent());
+                    imageInfo.increaseDrawSize(drawWidth, drawHeight);
+                }
+                final Node nameNode = parentNodeAttributes
+                        .getNamedItem("draw:name");
+                if (nameNode != null) {
+                    imageInfo.addName(nameNode.getTextContent());
+                }
+            }
+            progress.progress(++progressValue);
+        }
+        for (int i = 0; i < styleImageNodes.getLength(); ++i) {
+            final Node node = styleImageNodes.item(i);
+            final NamedNodeMap nodeAttributes = node.getAttributes();
+            final String imagePath = nodeAttributes.getNamedItem("xlink:href")
+                    .getTextContent();
+            final ImageInfo imageInfo = mImagesMap.get(imagePath);
+            final Node displayNameNode = nodeAttributes
+                    .getNamedItem("draw:display-name");
+            if (displayNameNode != null) {
+                imageInfo.addName(displayNameNode.getTextContent());
+            } else {
+                final Node nameNode = nodeAttributes.getNamedItem("draw:name");
+                if (nameNode != null) {
+                    imageInfo.addName(nameNode.getTextContent());
+                }
+            }
+            progress.progress(++progressValue);
+        }
+    }
 
-        saxParser.parse(contentFile, new ContentReaderHandler(mImagesMap,
-                mImages));
-        saxParser
-                .parse(styleFile, new StylesReaderHandler(mImagesMap, mImages));
+    /**
+     * Read XMLs files (content.xml and styles.xml)
+     * 
+     * @throws ParserConfigurationException
+     * @throws IOException
+     * @throws SAXException
+     */
+    private void readXMLs(final ProgressCheck progress)
+            throws ParserConfigurationException, SAXException, IOException
+    {
+        progress.progressMessage("Reading content");
+        progress.progressNewMaxValue(2);
+        if (sDocumentBuilder == null) {
+            sDocumentBuilder = sDOMFactory.newDocumentBuilder();
+        }
+        mContent = sDocumentBuilder.parse(getExtractedFile("content.xml"));
+        progress.progress(1);
+        mStyles = sDocumentBuilder.parse(getExtractedFile("styles.xml"));
     }
 }

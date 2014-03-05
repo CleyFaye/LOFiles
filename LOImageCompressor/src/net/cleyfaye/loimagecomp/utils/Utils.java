@@ -11,6 +11,25 @@ import java.io.IOException;
 public class Utils {
 
     /**
+     * Create all the parent directory for the given file, and mark them for
+     * deletion on vm shutdown.
+     * 
+     * @param tempFile
+     *            The target file. All it's parent directories will be created.
+     *            Any directory created this way will be marked for deletion on
+     *            vm close. Pre-existing directories will NOT be marked.
+     */
+    public static void createTempFilePath(final File tempFile)
+    {
+        final File parent = tempFile.getParentFile();
+        if (!parent.exists()) {
+            createTempFilePath(parent);
+            parent.mkdir();
+            parent.deleteOnExit();
+        }
+    }
+
+    /**
      * Convert a file size (in bytes) to a human readable string.
      * 
      * @param fileSize
@@ -80,24 +99,5 @@ public class Utils {
                     sizeString.length() - 2)) * 2.54;
         }
         throw new IOException("Unexpected image size information");
-    }
-
-    /**
-     * Create all the parent directory for the given file, and mark them for
-     * deletion on vm shutdown.
-     * 
-     * @param tempFile
-     *            The target file. All it's parent directories will be created.
-     *            Any directory created this way will be marked for deletion on
-     *            vm close. Pre-existing directories will NOT be marked.
-     */
-    public static void createTempFilePath(File tempFile)
-    {
-        File parent = tempFile.getParentFile();
-        if (!parent.exists()) {
-            createTempFilePath(parent);
-            parent.mkdir();
-            parent.deleteOnExit();
-        }
     }
 }

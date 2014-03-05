@@ -3,6 +3,8 @@ package net.cleyfaye.loimagecomp.imagecompress;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.imageio.ImageIO;
 
@@ -12,6 +14,9 @@ import javax.imageio.ImageIO;
  * This class hold the image path, the intended print size, and the original
  * resolution, as well as the target DPI and resolution.
  * 
+ * TODO images not embedded are never referenced in ImageInfo. Remove
+ * isEmbedded()
+ * 
  * @author Cley Faye
  */
 public class ImageInfo {
@@ -19,7 +24,7 @@ public class ImageInfo {
     /** Source ODT file */
     private final ODTFile mODTFile;
     /** Maximum intended print size in cm */
-    private final ImageSize mDrawSizeCm;
+    private final ImageSize mDrawSizeCm = new ImageSize(0, 0);
     /** Relative file name */
     private final String mFileName;
 
@@ -36,12 +41,16 @@ public class ImageInfo {
     private double mTargetDPI = 0;
     /** Target resolution */
     private ImageSize mTargetImageSizePx;
+    /**
+     * Image "names"
+     * 
+     * As found in the document
+     */
+    private final List<String> mNames = new ArrayList<>();
 
-    public ImageInfo(final ODTFile odtFile, final String fileName,
-            final double drawWidthCm, final double drawHeightCm)
+    public ImageInfo(final ODTFile odtFile, final String fileName)
             throws IOException {
         mODTFile = odtFile;
-        mDrawSizeCm = new ImageSize(drawWidthCm, drawHeightCm);
         mFileName = fileName;
         final File imageFile = new File(fileName);
         if (imageFile.isAbsolute()) {
@@ -55,6 +64,15 @@ public class ImageInfo {
             mImageSizePx = new ImageSize(img.getWidth(), img.getHeight());
             mImageSize = mFile.length();
             mTargetImageSizePx = mImageSizePx;
+        }
+    }
+
+    public void addName(final String name)
+    {
+        if (name != null && !name.isEmpty()) {
+            if (!mNames.contains(name)) {
+                mNames.add(name);
+            }
         }
     }
 
@@ -133,6 +151,25 @@ public class ImageInfo {
         if (mEmbedded) {
             mTargetImageSizePx = ImageSize.projectImageSize(mImageSizePx,
                     mDrawSizeCm, mTargetDPI);
+        }
+    }
+
+    @Override
+    public String toString()
+    {
+        if (mNames.isEmpty()) {
+            return mFileName;
+        } else {
+            final StringBuilder sb = new StringBuilder();
+            for (final String name : mNames) {
+                if (sb.length() == 0) {
+                    sb.append(name);
+                } else {
+                    sb.append(", ");
+                    sb.append(name);
+                }
+            }
+            return sb.toString();
         }
     }
 }

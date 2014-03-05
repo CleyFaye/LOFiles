@@ -7,6 +7,8 @@ import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -45,14 +47,10 @@ import javax.swing.filechooser.FileFilter;
 
 import net.cleyfaye.loimagecomp.imagecompress.ImageCompress;
 import net.cleyfaye.loimagecomp.imagecompress.ImageInfo;
-import net.cleyfaye.loimagecomp.imagecompress.ImageSize;
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller;
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller.SampleQuality;
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.Interface;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
-
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 
 /**
  * Application main window
@@ -298,13 +296,13 @@ public class MainWindow implements Interface, ProgressCheck {
         mframe = new JFrame();
         mframe.addWindowListener(new WindowAdapter() {
             @Override
-            public void windowClosing(WindowEvent arg0)
+            public void windowClosing(final WindowEvent arg0)
             {
                 mThreadPool.shutdown();
                 // Should be plenty
                 try {
                     mThreadPool.awaitTermination(5, TimeUnit.SECONDS);
-                } catch (InterruptedException e) {
+                } catch (final InterruptedException e) {
                     e.printStackTrace();
                 }
             }
@@ -495,6 +493,7 @@ public class MainWindow implements Interface, ProgressCheck {
                 @Override
                 public void run()
                 {
+                    mProgressMonitor.setProgress(0);
                     mProgressMonitor.setMaximum(maxValue);
                 }
             });
@@ -512,11 +511,22 @@ public class MainWindow implements Interface, ProgressCheck {
             if (!info.isEmbedded()) {
                 model.addElement("<not embedded>");
             } else {
-                model.addElement(info.getRelativeName());
+                model.addElement(info.toString());
             }
         }
         mDetectedImagesList.setModel(model);
         mDetectedImagesList.setSelectedIndex(-1);
+    }
+
+    private void setAllImagesDPI(final double dpi)
+    {
+        if (mImagesInfo == null) {
+            return;
+        }
+        for (final ImageInfo imageInfo : mImagesInfo) {
+            imageInfo.setTargetDPI(dpi);
+        }
+        showImageDetails();
     }
 
     /** Display current image details and projected size in the GUI */
@@ -564,17 +574,6 @@ public class MainWindow implements Interface, ProgressCheck {
         mImagesInfo = images;
         setAllImagesDPI(((Float) mTargetDPISpinner.getValue()).doubleValue());
         refreshImagesList();
-    }
-
-    private void setAllImagesDPI(double dpi)
-    {
-        if (mImagesInfo == null) {
-            return;
-        }
-        for (ImageInfo imageInfo : mImagesInfo) {
-            imageInfo.setTargetDPI(dpi);
-        }
-        showImageDetails();
     }
 
 }
