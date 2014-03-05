@@ -15,9 +15,6 @@ public class ImageSize {
      * resizing occurs (it's used to indicate that we don't know the intended
      * print size).
      * 
-     * TODO Add a limit under which images are not resized (for example to not
-     * resize things from 500x500 to 498x498)
-     * 
      * @param originalSizePx
      *            Original image size in pixels
      * @param drawSizeCm
@@ -42,6 +39,11 @@ public class ImageSize {
                 || targetSize.getY() > originalSizePx.getY()) {
             // We're getting bigger result, so just return the original size
             // instead
+            return new ImageSize(originalSizePx);
+        }
+        // Check if we're close to the original size
+        if (Math.abs(targetSize.getX() - originalSizePx.getX()) < 10
+                || Math.abs(targetSize.getY() - originalSizePx.getY()) < 10) {
             return new ImageSize(originalSizePx);
         }
         // Final step: make sure we're not outputting image that are half a
