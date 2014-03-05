@@ -29,8 +29,6 @@ import net.cleyfaye.loimagecomp.utils.Utils;
  */
 public class DownsampleImageFilter implements ImageFilter {
 
-    /** Target DPI */
-    private final double mDPI;
     /** Target JPG quality */
     private final int mJPGQuality;
     /** Target Interpolation mode */
@@ -43,10 +41,8 @@ public class DownsampleImageFilter implements ImageFilter {
     /** List of temporary files for each images path */
     private final Map<String, File> mImageFiles = new HashMap<>();
 
-    public DownsampleImageFilter(final double dpi, final int jpgQuality,
-            final int scalingMethod, final boolean killTransparency)
-            throws IOException {
-        mDPI = dpi;
+    public DownsampleImageFilter(final int jpgQuality, final int scalingMethod,
+            final boolean killTransparency) throws IOException {
         mJPGQuality = jpgQuality;
         mKillTransparency = killTransparency;
         mTempDir.deleteOnExit();
@@ -93,8 +89,7 @@ public class DownsampleImageFilter implements ImageFilter {
         // efficient.
         // Temp save file is stored for the next step.
         // TODO Although functionnal, this doesn't look good.
-        final ImageSize targetImageSize = ImageSize.projectImageSize(
-                imageInfo.getImageSizePx(), imageInfo.getDrawSizeCm(), mDPI);
+        final ImageSize targetImageSize = imageInfo.getTargetImageSizePx();
         final BufferedImage original = ImageIO.read(imageInfo.getFile());
         final int imageType = mKillTransparency ? BufferedImage.TYPE_INT_RGB
                 : original.getType();

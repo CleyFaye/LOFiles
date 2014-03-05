@@ -21,9 +21,6 @@ public interface Interface {
     /** Return the selected sample quality */
     public SampleQuality getSampleQuality();
 
-    /** Return the selected target dpi */
-    public double getTargetDPI();
-
     /** Display all the detected images */
     public void updateImagesList(List<ImageInfo> images);
 }

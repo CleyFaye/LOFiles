@@ -33,7 +33,7 @@ public class ImageInfo {
     /** The original image file */
     private File mFile;
     /** The target DPI */
-    private double mTargetDPI = 90;
+    private double mTargetDPI = 0;
     /** Target resolution */
     private ImageSize mTargetImageSizePx;
 
@@ -54,6 +54,7 @@ public class ImageInfo {
             final BufferedImage img = ImageIO.read(mFile);
             mImageSizePx = new ImageSize(img.getWidth(), img.getHeight());
             mImageSize = mFile.length();
+            mTargetImageSizePx = mImageSizePx;
         }
     }
 
@@ -84,7 +85,7 @@ public class ImageInfo {
         return mFileName;
     }
 
-    public ImageSize getTargetImageSize()
+    public ImageSize getTargetImageSizePx()
     {
         return new ImageSize(mTargetImageSizePx);
     }
@@ -129,7 +130,7 @@ public class ImageInfo {
     public void setTargetDPI(final double value)
     {
         mTargetDPI = value;
-        if (!mEmbedded) {
+        if (mEmbedded) {
             mTargetImageSizePx = ImageSize.projectImageSize(mImageSizePx,
                     mDrawSizeCm, mTargetDPI);
         }

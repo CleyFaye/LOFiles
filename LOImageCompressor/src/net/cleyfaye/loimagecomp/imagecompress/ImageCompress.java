@@ -56,15 +56,6 @@ public class ImageCompress implements Controller, Interface {
     }
 
     @Override
-    public double getTargetDPI()
-    {
-        if (mInterface != null) {
-            return mInterface.getTargetDPI();
-        }
-        return 90;
-    }
-
-    @Override
     public boolean isFileOpen()
     {
         return mODTFile != null;
@@ -88,13 +79,12 @@ public class ImageCompress implements Controller, Interface {
         final Instance progress = new Instance(progressCheck);
         progress.startProgress("Saving file");
         progress.progressNewMaxValue(mODTFile.getImagesCount() * 2);
-        final double dpi = getTargetDPI();
         final int jpegQuality = getJPEGQuality();
         final int sampleQuality = getSampleQuality() == SampleQuality.SQ_FAST ? 1
                 : 0;
         final boolean killTransparency = getKillTransparency();
-        final ImageFilter imageFilter = new DownsampleImageFilter(dpi,
-                jpegQuality, sampleQuality, killTransparency);
+        final ImageFilter imageFilter = new DownsampleImageFilter(jpegQuality,
+                sampleQuality, killTransparency);
         final boolean result = mODTFile.createCopy(odtFile, imageFilter,
                 progress);
         progress.endProgress();

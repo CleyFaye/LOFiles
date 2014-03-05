@@ -234,13 +234,6 @@ public class MainWindow implements Interface, ProgressCheck {
     /** Controller */
     private final Controller mController = new ImageCompress(this);
 
-    /**
-     * Output DPI
-     * 
-     * TODO just implement a getter/setter for this that peek/poke the GUI
-     */
-    private double mDPI = 90;
-
     private List<ImageInfo> mImagesInfo = null;
 
     private ProgressMonitor mProgressMonitor;
@@ -295,12 +288,6 @@ public class MainWindow implements Interface, ProgressCheck {
         case 1:
             return SampleQuality.SQ_SMOOTH;
         }
-    }
-
-    @Override
-    public double getTargetDPI()
-    {
-        return ((Float) mTargetDPISpinner.getValue()).doubleValue();
     }
 
     /**
@@ -422,8 +409,8 @@ public class MainWindow implements Interface, ProgressCheck {
             @Override
             public void stateChanged(final ChangeEvent arg0)
             {
-                mDPI = ((Float) mTargetDPISpinner.getValue()).doubleValue();
-                showImageDetails();
+                setAllImagesDPI(((Float) mTargetDPISpinner.getValue())
+                        .doubleValue());
             }
         });
         mTargetDPISpinner.setPreferredSize(new Dimension(70, 20));
@@ -547,9 +534,7 @@ public class MainWindow implements Interface, ProgressCheck {
         }
         mOriginalResLabel.setText(info.getImageSizePx() + " px");
         mImageSizeLabel.setText(info.getDrawSizeCm() + " cm");
-        mTargetResLabel.setText(ImageSize.projectImageSize(
-                info.getImageSizePx(), info.getDrawSizeCm(), mDPI)
-                + " px");
+        mTargetResLabel.setText(info.getTargetImageSizePx() + " px");
         mOriginalSizeLabel.setText(dataSizeToString(info.getImageSize()));
         mImageDetailsGroup.setVisible(true);
     }
@@ -577,7 +562,19 @@ public class MainWindow implements Interface, ProgressCheck {
     public void updateImagesList(final List<ImageInfo> images)
     {
         mImagesInfo = images;
+        setAllImagesDPI(((Float) mTargetDPISpinner.getValue()).doubleValue());
         refreshImagesList();
+    }
+
+    private void setAllImagesDPI(double dpi)
+    {
+        if (mImagesInfo == null) {
+            return;
+        }
+        for (ImageInfo imageInfo : mImagesInfo) {
+            imageInfo.setTargetDPI(dpi);
+        }
+        showImageDetails();
     }
 
 }
