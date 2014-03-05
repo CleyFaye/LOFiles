@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMResult;
@@ -20,6 +19,22 @@ import org.w3c.dom.Document;
  * @author Cley Faye
  */
 public class Utils {
+
+    private static TransformerFactory sTransformerFactory = TransformerFactory
+            .newInstance();
+
+    /** Create a clone of a DOM object */
+    public static Document cloneDOM(final Document src)
+            throws TransformerException
+    {
+        // Answer from
+        // http://stackoverflow.com/questions/279154/how-can-i-clone-an-entire-document-using-the-java-dom
+        final Transformer transformer = sTransformerFactory.newTransformer();
+        final DOMSource srcDom = new DOMSource(src);
+        final DOMResult resultDom = new DOMResult();
+        transformer.transform(srcDom, resultDom);
+        return (Document) resultDom.getNode();
+    }
 
     /**
      * Create all the parent directory for the given file, and mark them for
@@ -88,6 +103,18 @@ public class Utils {
     }
 
     /**
+     * Save a DOM object in a stream
+     */
+    public static void saveDOM(final Document doc, final OutputStream output)
+            throws TransformerException
+    {
+        final Transformer transformer = sTransformerFactory.newTransformer();
+        final DOMSource source = new DOMSource(doc);
+        final StreamResult result = new StreamResult(output);
+        transformer.transform(source, result);
+    }
+
+    /**
      * Get the image size from a string to a double.
      * 
      * @param sizeString
@@ -110,32 +137,5 @@ public class Utils {
                     sizeString.length() - 2)) * 2.54;
         }
         throw new IOException("Unexpected image size information");
-    }
-
-    private static TransformerFactory sTransformerFactory = TransformerFactory
-            .newInstance();
-
-    /** Create a clone of a DOM object */
-    public static Document cloneDOM(Document src) throws TransformerException
-    {
-        // Answer from
-        // http://stackoverflow.com/questions/279154/how-can-i-clone-an-entire-document-using-the-java-dom
-        Transformer transformer = sTransformerFactory.newTransformer();
-        DOMSource srcDom = new DOMSource(src);
-        DOMResult resultDom = new DOMResult();
-        transformer.transform(srcDom, resultDom);
-        return (Document) resultDom.getNode();
-    }
-
-    /**
-     * Save a DOM object in a stream
-     */
-    public static void saveDOM(Document doc, OutputStream output)
-            throws TransformerException
-    {
-        final Transformer transformer = sTransformerFactory.newTransformer();
-        final DOMSource source = new DOMSource(doc);
-        final StreamResult result = new StreamResult(output);
-        transformer.transform(source, result);
     }
 }

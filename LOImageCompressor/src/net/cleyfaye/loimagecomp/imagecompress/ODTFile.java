@@ -1,13 +1,9 @@
 package net.cleyfaye.loimagecomp.imagecompress;
 
-import static net.cleyfaye.loimagecomp.utils.Utils.replaceFileSuffix;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -23,11 +19,7 @@ import java.util.zip.ZipOutputStream;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
@@ -84,9 +76,6 @@ public class ODTFile {
     private final Map<String, ImageInfo> mImagesMap = new HashMap<>();
 
     private static DocumentBuilderFactory sDOMFactory = DocumentBuilderFactory
-            .newInstance();
-
-    private static TransformerFactory sDOMOutFactory = TransformerFactory
             .newInstance();
 
     private static DocumentBuilder sDocumentBuilder = null;
@@ -175,9 +164,9 @@ public class ODTFile {
             namesSubstitution.put(info.getRelativeName(), newName);
         }
         // We work on copies of content.xml and styles.xml
-        Document contentCopy = Utils.cloneDOM(mContent);
-        Document stylesCopy = Utils.cloneDOM(mStyles);
-        Document manifestCopy = Utils.cloneDOM(mManifest);
+        final Document contentCopy = Utils.cloneDOM(mContent);
+        final Document stylesCopy = Utils.cloneDOM(mStyles);
+        final Document manifestCopy = Utils.cloneDOM(mManifest);
 
         // Create the output
         try (ZipOutputStream zipOutput = new ZipOutputStream(
@@ -189,13 +178,13 @@ public class ODTFile {
             zipOutput.setMethod(ZipOutputStream.STORED);
 
             {
-                byte[] mimetypeBytes = "application/vnd.oasis.opendocument.text"
+                final byte[] mimetypeBytes = "application/vnd.oasis.opendocument.text"
                         .getBytes(Charset.forName("ASCII"));
-                ZipEntry mimetypeEntry = new ZipEntry("mimetype");
+                final ZipEntry mimetypeEntry = new ZipEntry("mimetype");
                 mimetypeEntry.setMethod(ZipEntry.STORED);
                 mimetypeEntry.setCompressedSize(mimetypeBytes.length);
                 mimetypeEntry.setSize(mimetypeBytes.length);
-                CRC32 crc = new CRC32();
+                final CRC32 crc = new CRC32();
                 crc.update(mimetypeBytes);
                 mimetypeEntry.setCrc(crc.getValue());
                 zipOutput.putNextEntry(mimetypeEntry);
@@ -314,7 +303,7 @@ public class ODTFile {
             SAXException, IOException, TransformerException,
             XPathExpressionException
     {
-        XPathExpression expr = sXPath
+        final XPathExpression expr = sXPath
                 .compile("//*[@*[name()='xlink:href' and starts-with(., 'Pictures/')]]");
         final NodeList nodes = (NodeList) expr.evaluate(input,
                 XPathConstants.NODESET);
@@ -369,7 +358,7 @@ public class ODTFile {
             SAXException, IOException, TransformerException,
             XPathExpressionException
     {
-        XPathExpression expr = sXPath
+        final XPathExpression expr = sXPath
                 .compile("//*[@*[name()='xlink:href' and starts-with(., 'Pictures/')]]");
         final NodeList nodes = (NodeList) expr.evaluate(input,
                 XPathConstants.NODESET);

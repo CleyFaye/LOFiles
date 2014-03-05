@@ -77,7 +77,7 @@ public class DownsampleImageFilter implements ImageFilter {
     @Override
     public String getImageFileName(final ImageInfo imageInfo) throws Exception
     {
-        String originalName = imageInfo.getRelativeName();
+        final String originalName = imageInfo.getRelativeName();
         return Utils.replaceFileSuffix(originalName,
                 mImageSuffixes.get(originalName));
     }
