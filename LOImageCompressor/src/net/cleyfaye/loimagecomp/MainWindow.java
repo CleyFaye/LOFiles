@@ -9,8 +9,9 @@ import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.util.List;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import javax.swing.AbstractAction;
 import javax.swing.AbstractListModel;
@@ -49,6 +50,9 @@ import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller;
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.Controller.SampleQuality;
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.Interface;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
+
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 /**
  * Application main window
@@ -186,7 +190,8 @@ public class MainWindow implements Interface, ProgressCheck {
     /** Shared path for open/save dialogs */
     private File mDialogPath = null;
 
-    private final Executor mThreadPool = Executors.newSingleThreadExecutor();
+    private final ExecutorService mThreadPool = Executors
+            .newSingleThreadExecutor();
 
     private static FileFilter mODTFileFilter = new FileFilter() {
 
@@ -304,6 +309,19 @@ public class MainWindow implements Interface, ProgressCheck {
     private void initialize()
     {
         mframe = new JFrame();
+        mframe.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent arg0)
+            {
+                mThreadPool.shutdown();
+                // Should be plenty
+                try {
+                    mThreadPool.awaitTermination(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
         mframe.setBounds(100, 100, 847, 766);
         mframe.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 

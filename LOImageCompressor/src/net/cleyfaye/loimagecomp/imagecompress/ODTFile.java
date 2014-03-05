@@ -32,6 +32,7 @@ import javax.xml.transform.stream.StreamResult;
 
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.ImageFilter;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck;
+import net.cleyfaye.loimagecomp.utils.Utils;
 import net.cleyfaye.loimagecomp.utils.ProgressCheck.Instance;
 
 import org.w3c.dom.Document;
@@ -241,14 +242,14 @@ public class ODTFile {
             final ProgressCheck progressCheck) throws Exception
     {
         final Instance progress = new Instance(progressCheck);
-        progress.progressNewMaxValue(mImagesMap.values().size() * 2
+        progress.progressNewMaxValue(mImagesMap.values().size() * 3
                 + mFiles.size());
         int progressValue = 0;
         final byte[] buffer = new byte[4096];
         // First, we get new names for all pictures. Needed mainly to change
         // from one file format to another
         final Map<String, String> namesSubstitution = new HashMap<>();
-        progress.progressMessage("Filtering images");
+        progress.progressMessage("Preparing images");
         for (final ImageInfo info : mImagesMap.values()) {
             if (!progress.progress(++progressValue)) {
                 return false;
@@ -256,11 +257,16 @@ public class ODTFile {
             if (!info.isEmbedded()) {
                 continue;
             }
-            final String newSuffix = imageFilter.filterImageSuffix(mTempPath,
-                    info);
-            if (newSuffix == null) {
+            imageFilter.prepareImage(info);
+        }
+        for (final ImageInfo info : mImagesMap.values()) {
+            if (!progress.progress(++progressValue)) {
                 return false;
             }
+            if (!info.isEmbedded()) {
+                continue;
+            }
+            final String newSuffix = imageFilter.getImageSuffix(info);
             final String newName = replaceFileSuffix(info.getRelativeName(),
                     newSuffix);
             namesSubstitution.put(info.getRelativeName(), newName);
@@ -337,9 +343,7 @@ public class ODTFile {
                 }
                 zipOutput.putNextEntry(new ZipEntry(namesSubstitution.get(info
                         .getRelativeName())));
-                if (!imageFilter.filterImage(mTempPath, info, zipOutput)) {
-                    return false;
-                }
+                imageFilter.getImageData(info, zipOutput);
                 zipOutput.closeEntry();
             }
         }
@@ -356,7 +360,8 @@ public class ODTFile {
             while ((zipEntry = zipInput.getNextEntry()) != null) {
                 final String fileName = zipEntry.getName();
                 final File tempPath = new File(mTempPath, fileName);
-                tempPath.getParentFile().mkdirs();
+                Utils.createTempFilePath(tempPath);
+                tempPath.deleteOnExit();
                 try (FileOutputStream output = new FileOutputStream(tempPath)) {
                     final byte[] buffer = new byte[4096];
                     int readCount;

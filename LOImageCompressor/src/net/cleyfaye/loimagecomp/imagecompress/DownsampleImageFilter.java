@@ -20,6 +20,7 @@ import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
 
 import net.cleyfaye.loimagecomp.imagecompress.interfaces.ImageFilter;
+import net.cleyfaye.loimagecomp.utils.Utils;
 
 /**
  * Filter to resize images when saving ODT file.
@@ -61,7 +62,7 @@ public class DownsampleImageFilter implements ImageFilter {
     }
 
     @Override
-    public boolean filterImage(final File tempDir, final ImageInfo imageInfo,
+    public void getImageData(final ImageInfo imageInfo,
             final OutputStream output) throws Exception
     {
         // At this point, each pictures is already saved somewhere.
@@ -74,22 +75,27 @@ public class DownsampleImageFilter implements ImageFilter {
             }
         }
         file.delete();
-        return true;
     }
 
     @Override
-    public String filterImageSuffix(final File tempDir,
-            final ImageInfo imageInfo) throws Exception
+    public String getImageSuffix(final ImageInfo imageInfo) throws Exception
+    {
+        return Utils.getFileSuffix(mImageFiles.get(imageInfo.getRelativeName())
+                .getName());
+    }
+
+    @Override
+    public void prepareImage(final ImageInfo imageInfo) throws Exception
     {
         // This function is called one time on each image, before actually
         // saving. Since we need to know the final image suffix at this
         // point, we have to save in each format to see which one is most
         // efficient.
         // Temp save file is stored for the next step.
+        // TODO Although functionnal, this doesn't look good.
         final ImageSize targetImageSize = ImageSize.projectImageSize(
                 imageInfo.getImageSizePx(), imageInfo.getDrawSizeCm(), mDPI);
-        final BufferedImage original = ImageIO.read(new File(tempDir, imageInfo
-                .getRelativeName()));
+        final BufferedImage original = ImageIO.read(imageInfo.getFile());
         final int imageType = mKillTransparency ? BufferedImage.TYPE_INT_RGB
                 : original.getType();
         final BufferedImage resized = new BufferedImage(
@@ -112,47 +118,50 @@ public class DownsampleImageFilter implements ImageFilter {
             final ImageWriteParam iwp = writer.getDefaultWriteParam();
             iwp.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
             iwp.setCompressionQuality(mJPGQuality / 100f);
-            final File tempJPG = Files.createTempFile("loimgcomp", "jpg")
+            final File tempJPG = Files.createTempFile("loimgcomp1", ".jpg")
                     .toFile();
             tempJPG.deleteOnExit();
-            final File tempPNG = Files.createTempFile("loimgcomp", "png")
+            final File tempPNG = Files.createTempFile("loimgcomp2", ".png")
                     .toFile();
             tempPNG.deleteOnExit();
-            try (ImageOutputStream ios = ImageIO
-                    .createImageOutputStream(new FileOutputStream(tempJPG))) {
-                writer.setOutput(ios);
-                writer.write(null, new IIOImage(resized, null, null), iwp);
+            try (OutputStream fos = new FileOutputStream(tempJPG)) {
+                try (ImageOutputStream ios = ImageIO
+                        .createImageOutputStream(fos)) {
+                    writer.setOutput(ios);
+                    writer.write(null, new IIOImage(resized, null, null), iwp);
+                }
             }
-            try (ImageOutputStream ios = ImageIO
-                    .createImageOutputStream(new FileOutputStream(tempPNG))) {
-                writer.setOutput(ios);
-                writer.write(resized);
+            try (OutputStream fos = new FileOutputStream(tempPNG)) {
+                try (ImageOutputStream ios = ImageIO
+                        .createImageOutputStream(fos)) {
+                    writer.setOutput(ios);
+                    writer.write(resized);
+                }
             }
             if (tempPNG.length() < tempJPG.length()) {
                 // Use png
                 tempJPG.delete();
                 mImageFiles.put(imageInfo.getRelativeName(), tempPNG);
-                return "png";
             } else {
                 // Use jpg
                 tempPNG.delete();
                 mImageFiles.put(imageInfo.getRelativeName(), tempJPG);
-                return "jpg";
             }
         } else {
             // Save as png
-            final File tempPNG = Files.createTempFile("loimgcomp", "png")
+            final File tempPNG = Files.createTempFile("loimgcomp3", ".png")
                     .toFile();
             tempPNG.deleteOnExit();
             final ImageWriter writer = ImageIO.getImageWritersBySuffix("png")
                     .next();
-            try (ImageOutputStream ios = ImageIO
-                    .createImageOutputStream(new FileOutputStream(tempPNG))) {
-                writer.setOutput(ios);
-                writer.write(resized);
+            try (OutputStream fos = new FileOutputStream(tempPNG)) {
+                try (ImageOutputStream ios = ImageIO
+                        .createImageOutputStream(fos)) {
+                    writer.setOutput(ios);
+                    writer.write(resized);
+                }
             }
             mImageFiles.put(imageInfo.getRelativeName(), tempPNG);
-            return "png";
         }
     }
 
